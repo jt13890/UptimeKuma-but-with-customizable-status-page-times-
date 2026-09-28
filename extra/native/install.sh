@@ -165,6 +165,13 @@ info "Installing dependencies (production only)"
     npm ci --omit=dev --no-audit --no-fund
 )
 
+# The SQLite module gets its native binary from its install script. npm 12+ only runs
+# install scripts listed in "allowScripts" in package.json, so make sure it really worked.
+if ! (cd "$NEW" && node -e 'require("@louislam/sqlite3")') >/dev/null 2>&1; then
+    (cd "$NEW" && node -e 'require("@louislam/sqlite3")') || true
+    die "the SQLite module did not install its native binary (see the error above). With npm 12 or newer, check that package.json has \"@louislam/sqlite3\": true under \"allowScripts\" (npm install-scripts ls)"
+fi
+
 if [ -n "$IMPORT_DATA" ]; then
     info "Checking the data to import ($IMPORT_DATA)"
     (cd "$NEW" && node extra/native/check-data-dir.js "$IMPORT_DATA") || die "not importing $IMPORT_DATA"

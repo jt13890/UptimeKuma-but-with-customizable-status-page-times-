@@ -223,5 +223,18 @@
         "vuedraggable": "~4.1.0",
         "wait-on": "^7.2.0",
         "whatwg-url": "~12.0.1"
+    },
+    "allowScripts": {
+        "@louislam/sqlite3": true,
+        "esbuild": true,
+        "vue-demi": true,
+        "cpu-features": false,
+        "ssh2": false,
+        "protobufjs": false,
+        "core-js": false,
+        "@fortawesome/fontawesome-common-types": false,
+        "@fortawesome/fontawesome-svg-core": false,
+        "@fortawesome/free-regular-svg-icons": false,
+        "@fortawesome/free-solid-svg-icons": false
     }
 }

@@ -86,6 +86,9 @@ Leave out `--rebuild` if you copied a freshly built `dist/` over. Your data and
 - **Ping monitors** need iputils `ping`. BusyBox `ping` doesn't support the options they use.
   The script gives iputils ping the `cap_net_raw` capability, so it works without root. Run the
   script again after upgrading iputils, because apk resets the capability.
+- **npm 12 and newer** only run the install scripts of packages listed under `allowScripts` in
+  `package.json`. This repo approves the ones it needs, e.g. `@louislam/sqlite3` for its native
+  binary. `npm install-scripts ls` shows anything that's still blocked.
 - **System Service monitors** use `rc-service <name> status` on OpenRC, and `systemctl` on systemd.
 - **Linux 3.10**: Node.js (libuv) supports 3.10 as its minimum. When features from newer kernels
   are missing (`getrandom`, `statx`, `io_uring`, ...), it falls back to older ones.
