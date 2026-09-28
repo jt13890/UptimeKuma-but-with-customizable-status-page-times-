@@ -1033,6 +1033,7 @@
     "systemServiceName": "Service Name",
     "systemServiceDescription": "Checks if system service {service_name} is active",
     "systemServiceDescriptionLinux": "Checks if Linux systemd service {service_name} is active",
+    "systemServiceDescriptionOpenRC": "Checks if OpenRC service {service_name} is started",
     "systemServiceDescriptionWindows": "Checks if Windows Service Manager {service_name} is running",
     "systemServiceCommandHint": "Command used: {command}",
     "systemServiceExpectedOutput": "Expected Output: \"{0}\"",

@@ -9,6 +9,7 @@ const io = server.io;
 const { setting } = require("./util-server");
 const checkVersion = require("./check-version");
 const Database = require("./database");
+const { SystemServiceMonitorType } = require("./monitor-types/system-service");
 
 /**
  * Send list of notification providers to client
@@ -155,6 +156,7 @@ async function sendInfo(socket, hideVersion = false) {
         info.runtime = {
             platform: process.platform, // linux or win32
             arch: process.arch, // x86 or arm
+            initSystem: process.platform === "linux" ? SystemServiceMonitorType.getLinuxInitSystem() : null, // systemd or openrc
         };
     }
 
