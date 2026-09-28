@@ -20,6 +20,12 @@ class StatusPage extends BeanModel {
     static domainMappingList = { };
 
     /**
+     * Maximum number of days of history a status page can expose
+     * @type {number}
+     */
+    static MAX_HEARTBEAT_BAR_DAYS = 90;
+
+    /**
      * Handle responses to RSS pages
      * @param {Response} response Response object
      * @param {string} slug Status page slug
@@ -458,6 +464,7 @@ class StatusPage extends BeanModel {
             showCertificateExpiry: !!this.show_certificate_expiry,
             showOnlyLastHeartbeat: !!this.show_only_last_heartbeat,
             rssTitle: this.rss_title,
+            heartbeatBarDays: StatusPage.normalizeHeartbeatBarDays(this.heartbeat_bar_days),
         };
     }
 
@@ -485,7 +492,22 @@ class StatusPage extends BeanModel {
             showCertificateExpiry: !!this.show_certificate_expiry,
             showOnlyLastHeartbeat: !!this.show_only_last_heartbeat,
             rssTitle: this.rss_title,
+            heartbeatBarDays: StatusPage.normalizeHeartbeatBarDays(this.heartbeat_bar_days),
         };
+    }
+
+    /**
+     * Clamp the "history range" setting to a supported number of days
+     * 0 means the legacy view (last 100 heartbeats)
+     * @param {any} days Requested number of days
+     * @returns {number} Integer between 0 and MAX_HEARTBEAT_BAR_DAYS
+     */
+    static normalizeHeartbeatBarDays(days) {
+        const parsed = Math.floor(Number(days));
+        if (!Number.isFinite(parsed) || parsed < 0) {
+            return 0;
+        }
+        return Math.min(parsed, StatusPage.MAX_HEARTBEAT_BAR_DAYS);
     }
 
     /**

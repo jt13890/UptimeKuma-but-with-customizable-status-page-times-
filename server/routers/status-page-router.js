@@ -4,7 +4,8 @@ const { UptimeKumaServer } = require("../uptime-kuma-server");
 const StatusPage = require("../model/status_page");
 const { allowDevAllOrigin, sendHttpError } = require("../util-server");
 const { R } = require("redbean-node");
-const { badgeConstants } = require("../../src/util");
+const { badgeConstants, UP, DOWN, PENDING, MAINTENANCE } = require("../../src/util");
+const dayjs = require("dayjs");
 const { makeBadge } = require("badge-maker");
 const { UptimeCalculator } = require("../uptime-calculator");
 
@@ -64,16 +65,23 @@ router.get("/api/status-page/:slug", cache("5 minutes"), async (request, respons
 
 // Status Page Polling Data
 // Can fetch only if published
+// Optional query: ?maxBeats=N, the number of bars the client can display (used when the status page has a history range set)
 router.get("/api/status-page/heartbeat/:slug", cache("1 minutes"), async (request, response) => {
     allowDevAllOrigin(response);
 
     try {
         let heartbeatList = {};
+        let heartbeatBarList = {};
         let uptimeList = {};
 
         let slug = request.params.slug;
         slug = slug.toLowerCase();
-        let statusPageID = await StatusPage.slugToID(slug);
+        let statusPageRow = await R.getRow("SELECT id, heartbeat_bar_days FROM status_page WHERE slug = ? ", [
+            slug
+        ]);
+        let statusPageID = statusPageRow?.id;
+        let heartbeatBarDays = StatusPage.normalizeHeartbeatBarDays(statusPageRow?.heartbeat_bar_days);
+        let maxBeats = parseMaxBeats(request.query.maxBeats);
 
         let monitorIDList = await R.getCol(`
             SELECT monitor_group.monitor_id FROM monitor_group, \`group\`
@@ -85,13 +93,16 @@ router.get("/api/status-page/heartbeat/:slug", cache("1 minutes"), async (reques
         ]);
 
         for (let monitorID of monitorIDList) {
+            // With a history range, the bars come from the aggregated stats,
+            // so only the latest heartbeat is needed (for the current status)
             let list = await R.getAll(`
                     SELECT * FROM heartbeat
                     WHERE monitor_id = ?
                     ORDER BY time DESC
-                    LIMIT 100
+                    LIMIT ?
             `, [
                 monitorID,
+                heartbeatBarDays > 0 ? 1 : 100,
             ]);
 
             list = R.convertToBeans("heartbeat", list);
@@ -99,10 +110,17 @@ router.get("/api/status-page/heartbeat/:slug", cache("1 minutes"), async (reques
 
             const uptimeCalculator = await UptimeCalculator.getUptimeCalculator(monitorID);
             uptimeList[`${monitorID}_24`] = uptimeCalculator.get24Hour().uptime;
+
+            if (heartbeatBarDays > 0) {
+                heartbeatBarList[monitorID] = getHeartbeatBars(uptimeCalculator, heartbeatBarDays, maxBeats);
+                uptimeList[`${monitorID}_${heartbeatBarDays}d`] = getRangeUptime(uptimeCalculator, heartbeatBarDays);
+            }
         }
 
         response.json({
             heartbeatList,
+            heartbeatBarList,
+            heartbeatBarDays,
             uptimeList
         });
 
@@ -110,6 +128,72 @@ router.get("/api/status-page/heartbeat/:slug", cache("1 minutes"), async (reques
         sendHttpError(response, error.message);
     }
 });
+
+/**
+ * Parse the maxBeats query parameter
+ * @param {any} value Raw query value
+ * @returns {number} Number of bars, between 1 and MAX_BARS
+ */
+function parseMaxBeats(value) {
+    const MAX_BARS = 200;
+    const parsed = parseInt(value);
+    if (!Number.isFinite(parsed) || parsed < 1) {
+        return 100;
+    }
+    return Math.min(parsed, MAX_BARS);
+}
+
+/**
+ * Build the aggregated heartbeat bars for a status page with a history range
+ * Each bar looks like a heartbeat so that HeartbeatBar can render it.
+ * @param {UptimeCalculator} uptimeCalculator Uptime calculator of the monitor
+ * @param {number} days Number of days to cover
+ * @param {number} maxBeats Maximum number of bars
+ * @returns {Array<object>} Bars ordered from oldest to newest
+ */
+function getHeartbeatBars(uptimeCalculator, days, maxBeats) {
+    const now = uptimeCalculator.getCurrentDate().unix();
+    const format = (timestamp) => dayjs.unix(timestamp).utc().format("YYYY-MM-DD HH:mm:ss");
+
+    return uptimeCalculator.getAggregatedBuckets(days, maxBeats).map((bucket) => {
+        const total = bucket.up + bucket.down;
+        let status = null;
+        let partial = false;
+
+        if (bucket.down > 0) {
+            // Some downtime shows as orange, down for the whole bar shows as red
+            partial = bucket.up > 0;
+            status = partial ? PENDING : DOWN;
+        } else if (bucket.maintenance > 0) {
+            status = MAINTENANCE;
+        } else if (bucket.up > 0) {
+            status = UP;
+        }
+
+        return {
+            status,
+            time: format(bucket.start),
+            endTime: format(Math.min(bucket.end, now)),
+            uptime: total > 0 ? bucket.up / total : null,
+            partial,
+        };
+    });
+}
+
+/**
+ * Get the uptime of a monitor over the last `days` days
+ * @param {UptimeCalculator} uptimeCalculator Uptime calculator of the monitor
+ * @param {number} days Number of days
+ * @returns {number} Uptime between 0 and 1
+ */
+function getRangeUptime(uptimeCalculator, days) {
+    if (days <= 1) {
+        return uptimeCalculator.get24Hour().uptime;
+    } else if (days <= 30) {
+        return uptimeCalculator.getData(days * 24, "hour").uptime;
+    }
+    return uptimeCalculator.getData(days, "day").uptime;
+}
 
 // Status page's manifest.json
 router.get("/api/status-page/:slug/manifest.json", cache("1440 minutes"), async (request, response) => {

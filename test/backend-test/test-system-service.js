@@ -1,9 +1,10 @@
-const { describe, test, beforeEach, afterEach } = require("node:test");
+const { describe, test, beforeEach, afterEach, mock } = require("node:test");
 const assert = require("node:assert");
 const { SystemServiceMonitorType } = require("../../server/monitor-types/system-service");
 const { DOWN, UP } = require("../../src/util");
 const process = require("process");
-const { execSync } = require("node:child_process");
+const childProcess = require("node:child_process");
+const { execSync } = childProcess;
 
 /**
  * Check if the test should be skipped.
@@ -103,5 +104,80 @@ describe("SystemServiceMonitorType", { skip: shouldSkip() }, () => {
         };
 
         await assert.rejects(monitorType.check(monitor, heartbeat), /not supported/);
+    });
+});
+
+describe("SystemServiceMonitorType on Linux init systems", () => {
+    let monitorType;
+    let heartbeat;
+    let originalPlatform;
+    let calls;
+
+    beforeEach(() => {
+        monitorType = new SystemServiceMonitorType();
+        heartbeat = {
+            status: DOWN,
+            msg: "",
+        };
+        calls = [];
+        originalPlatform = Object.getOwnPropertyDescriptor(process, "platform");
+        Object.defineProperty(process, "platform", {
+            value: "linux",
+            configurable: true,
+        });
+    });
+
+    afterEach(() => {
+        Object.defineProperty(process, "platform", originalPlatform);
+        mock.restoreAll();
+    });
+
+    /**
+     * Pretend to be running with the given init system, and make the service command exit with the given code
+     * @param {string} initSystem "systemd" or "openrc"
+     * @param {number} exitCode Exit code of the service command
+     * @param {string} stdout Output of the service command
+     * @returns {void}
+     */
+    function mockInitSystem(initSystem, exitCode, stdout) {
+        mock.method(SystemServiceMonitorType, "getLinuxInitSystem", () => initSystem);
+        mock.method(childProcess, "execFile", (cmd, args, options, callback) => {
+            calls.push([ cmd, ...args ]);
+            const error = exitCode === 0 ? null : Object.assign(new Error("Command failed"), { code: exitCode });
+            callback(error, stdout, "");
+        });
+    }
+
+    test("OpenRC: started service is UP", async () => {
+        mockInitSystem("openrc", 0, " * status: started\n");
+        await monitorType.check({ system_service_name: "sshd" }, heartbeat);
+
+        assert.deepStrictEqual(calls, [[ "rc-service", "sshd", "status" ]]);
+        assert.strictEqual(heartbeat.status, UP);
+        assert.ok(heartbeat.msg.includes("is running"));
+    });
+
+    test("OpenRC: stopped or crashed service is DOWN with the rc-service output", async () => {
+        mockInitSystem("openrc", 3, " * status: stopped\n");
+        await assert.rejects(monitorType.check({ system_service_name: "sshd" }, heartbeat), /status: stopped/);
+        assert.strictEqual(heartbeat.status, DOWN);
+
+        mock.restoreAll();
+        mockInitSystem("openrc", 32, " * status: crashed\n");
+        await assert.rejects(monitorType.check({ system_service_name: "sshd" }, heartbeat), /status: crashed/);
+    });
+
+    test("systemd: uses systemctl is-active", async () => {
+        mockInitSystem("systemd", 0, "active\n");
+        await monitorType.check({ system_service_name: "sshd" }, heartbeat);
+
+        assert.deepStrictEqual(calls, [[ "systemctl", "is-active", "sshd" ]]);
+        assert.strictEqual(heartbeat.status, UP);
+    });
+
+    test("invalid service names are rejected before running anything", async () => {
+        mockInitSystem("openrc", 0, "");
+        await assert.rejects(monitorType.check({ system_service_name: "sshd; reboot" }, heartbeat), /Invalid service name/);
+        assert.deepStrictEqual(calls, []);
     });
 });

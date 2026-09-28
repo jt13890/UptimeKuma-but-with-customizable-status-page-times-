@@ -776,6 +776,74 @@ class UptimeCalculator {
     }
 
     /**
+     * Split the last `days` days into at most `maxBuckets` evenly sized
+     * buckets and sum up the stats inside each one.
+     * Uses minutely data for 1 day, hourly data up to 30 days and daily data beyond that,
+     * which matches how long each kind of stat is kept in memory.
+     * @param {number} days Number of days to cover (1 - 365)
+     * @param {number} maxBuckets Maximum number of buckets to return
+     * @returns {Array<{start: number, end: number, up: number, down: number, maintenance: number}>}
+     * Buckets ordered from oldest to newest. start/end are unix timestamps, end is exclusive.
+     */
+    getAggregatedBuckets(days, maxBuckets) {
+        days = Math.min(365, Math.max(1, Math.floor(days)));
+        maxBuckets = Math.max(1, Math.floor(maxBuckets));
+
+        let type;
+        let unitSeconds;
+        let numUnits;
+        let dataList;
+
+        if (days <= 1) {
+            type = "minute";
+            unitSeconds = 60;
+            numUnits = days * 1440;
+            dataList = this.minutelyUptimeDataList;
+        } else if (days <= 30) {
+            type = "hour";
+            unitSeconds = 3600;
+            numUnits = days * 24;
+            dataList = this.hourlyUptimeDataList;
+        } else {
+            type = "day";
+            unitSeconds = 86400;
+            numUnits = days;
+            dataList = this.dailyUptimeDataList;
+        }
+
+        const numBuckets = Math.min(maxBuckets, numUnits);
+        const firstKey = this.getKey(this.getCurrentDate(), type) - unitSeconds * (numUnits - 1);
+        const buckets = [];
+
+        for (let i = 0; i < numBuckets; i++) {
+            // Spread the units as evenly as possible, so the buckets always cover the full range
+            const startUnit = Math.floor(i * numUnits / numBuckets);
+            const endUnit = Math.floor((i + 1) * numUnits / numBuckets);
+
+            const bucket = {
+                start: firstKey + startUnit * unitSeconds,
+                end: firstKey + endUnit * unitSeconds,
+                up: 0,
+                down: 0,
+                maintenance: 0,
+            };
+
+            for (let unit = startUnit; unit < endUnit; unit++) {
+                const data = dataList[firstKey + unit * unitSeconds];
+                if (data) {
+                    bucket.up += data.up || 0;
+                    bucket.down += data.down || 0;
+                    bucket.maintenance += data.maintenance || 0;
+                }
+            }
+
+            buckets.push(bucket);
+        }
+
+        return buckets;
+    }
+
+    /**
      * Get the uptime data for given duration.
      * @param {string} duration  A string with a number and a unit (m,h,d,w,M,y), such as 24h, 30d, 1y.
      * @returns {UptimeDataResult} UptimeDataResult

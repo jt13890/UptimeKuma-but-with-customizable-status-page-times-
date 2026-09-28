@@ -42,6 +42,20 @@
                     </div>
                 </div>
 
+                <!-- History Range -->
+                <div class="my-3">
+                    <label for="heartbeat-bar-days" class="form-label">{{ $t("statusPageHistoryRange") }}</label>
+                    <select id="heartbeat-bar-days" v-model.number="config.heartbeatBarDays" class="form-select" data-testid="heartbeat-bar-days-select">
+                        <option :value="0">{{ $t("statusPageHistoryRecentChecks") }}</option>
+                        <option v-for="days in heartbeatBarDayOptions" :key="days" :value="days">
+                            {{ $t("statusPageHistoryLastDays", [ days, $tc("day", days) ]) }}
+                        </option>
+                    </select>
+                    <div class="form-text">
+                        {{ $t("statusPageHistoryRangeDescription") }}
+                    </div>
+                </div>
+
                 <div class="my-3">
                     <label for="switch-theme" class="form-label">{{ $t("Theme") }}</label>
                     <select id="switch-theme" v-model="config.theme" class="form-select" data-testid="theme-select">
@@ -358,7 +372,14 @@
                     👀 {{ $t("statusPageNothing") }}
                 </div>
 
-                <PublicGroupList :edit-mode="enableEditMode" :show-tags="config.showTags" :show-certificate-expiry="config.showCertificateExpiry" :show-only-last-heartbeat="config.showOnlyLastHeartbeat" />
+                <PublicGroupList
+                    :edit-mode="enableEditMode"
+                    :show-tags="config.showTags"
+                    :show-certificate-expiry="config.showCertificateExpiry"
+                    :show-only-last-heartbeat="config.showOnlyLastHeartbeat"
+                    :heartbeat-bar-days="enableEditMode ? 0 : heartbeatBarDays"
+                    :heartbeat-bar-list="heartbeatBarList"
+                />
             </div>
 
             <footer class="mt-5 mb-4">
@@ -478,6 +499,14 @@ export default {
             clickedEditButton: false,
             maintenanceList: [],
             lastUpdateTime: dayjs(),
+            // History range the heartbeat data was loaded with (0 = last 100 heartbeats)
+            heartbeatBarDays: 0,
+            // Aggregated bars per monitor, only used when heartbeatBarDays > 0
+            heartbeatBarList: {},
+            // Number of bars that fit in the heartbeat bar, reported by HeartbeatBar
+            heartbeatMaxBeats: null,
+            heartbeatReloadTimeout: null,
+            heartbeatBarDayOptions: [ 1, 7, 14, 30, 60, 90 ],
             updateCountdown: null,
             updateCountdownText: null,
             loading: true,
@@ -801,11 +830,18 @@ export default {
         updateHeartbeatList() {
             // If editMode, it will use the data from websocket.
             if (! this.editMode) {
-                axios.get("/api/status-page/heartbeat/" + this.slug).then((res) => {
+                const params = {};
+                if (this.heartbeatMaxBeats) {
+                    params.maxBeats = this.heartbeatMaxBeats;
+                }
+
+                axios.get("/api/status-page/heartbeat/" + this.slug, { params }).then((res) => {
                     const { heartbeatList, uptimeList } = res.data;
 
                     this.$root.heartbeatList = heartbeatList;
                     this.$root.uptimeList = uptimeList;
+                    this.heartbeatBarDays = res.data.heartbeatBarDays || 0;
+                    this.heartbeatBarList = res.data.heartbeatBarList || {};
 
                     const heartbeatIds = Object.keys(heartbeatList);
                     const downMonitors = heartbeatIds.reduce((downMonitorsAmount, currentId) => {
@@ -826,6 +862,25 @@ export default {
                     this.updateUpdateTimer();
                 });
             }
+        },
+
+        /**
+         * Called by HeartbeatBar when the number of bars that fit on screen changes.
+         * Only relevant when a history range is set, as the server aggregates the bars to fit.
+         * Debounced, since every HeartbeatBar on the page reports it.
+         * @param {number} maxBeats Number of bars that fit in the heartbeat bar
+         * @returns {void}
+         */
+        reloadHeartbeatData(maxBeats) {
+            if (!maxBeats || maxBeats === this.heartbeatMaxBeats) {
+                return;
+            }
+            this.heartbeatMaxBeats = maxBeats;
+
+            clearTimeout(this.heartbeatReloadTimeout);
+            this.heartbeatReloadTimeout = setTimeout(() => {
+                this.updateHeartbeatList();
+            }, 300);
         },
 
         /**

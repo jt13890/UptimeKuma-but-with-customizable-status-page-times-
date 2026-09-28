@@ -1,11 +1,28 @@
 const { MonitorType } = require("./monitor-type");
-const { execFile } = require("child_process");
+const childProcess = require("child_process");
+const fs = require("fs");
 const process = require("process");
 const { UP } = require("../../src/util");
 
 class SystemServiceMonitorType extends MonitorType {
     name = "system-service";
-    description = "Checks if a system service is running (systemd on Linux, Service Manager on Windows).";
+    description = "Checks if a system service is running (systemd or OpenRC on Linux, Service Manager on Windows).";
+
+    /**
+     * Detect the init system of this Linux machine
+     * @returns {"systemd"|"openrc"} Init system, systemd if unknown
+     */
+    static getLinuxInitSystem() {
+        // Same check as sd_booted()
+        if (fs.existsSync("/run/systemd/system")) {
+            return "systemd";
+        }
+        // OpenRC keeps its state in /run/openrc (Alpine, postmarketOS, Gentoo...)
+        if (fs.existsSync("/run/openrc")) {
+            return "openrc";
+        }
+        return "systemd";
+    }
 
     /**
      * Check the system service status.
@@ -29,7 +46,7 @@ class SystemServiceMonitorType extends MonitorType {
     }
 
     /**
-     * Linux Check (Systemd)
+     * Linux Check (systemd or OpenRC)
      * @param {string} serviceName The name of the service to check.
      * @param {object} heartbeat The heartbeat object.
      * @returns {Promise<void>}
@@ -43,7 +60,16 @@ class SystemServiceMonitorType extends MonitorType {
                 return;
             }
 
-            execFile("systemctl", [ "is-active", serviceName ], { timeout: 5000 }, (error, stdout, stderr) => {
+            let cmd = "systemctl";
+            let args = [ "is-active", serviceName ];
+
+            if (SystemServiceMonitorType.getLinuxInitSystem() === "openrc") {
+                // Exits with 0 only if the service is started ("stopped" and "crashed" are non-zero)
+                cmd = "rc-service";
+                args = [ serviceName, "status" ];
+            }
+
+            childProcess.execFile(cmd, args, { timeout: 5000 }, (error, stdout, stderr) => {
                 // Combine output and truncate to ~200 chars to prevent DB bloat
                 let output = (stderr || stdout || "").toString().trim();
                 if (output.length > 200) {
@@ -86,7 +112,7 @@ class SystemServiceMonitorType extends MonitorType {
                 `(Get-Service -Name '${serviceName.replaceAll("'", "''")}').Status`
             ];
 
-            execFile(cmd, args, { timeout: 5000 }, (error, stdout, stderr) => {
+            childProcess.execFile(cmd, args, { timeout: 5000 }, (error, stdout, stderr) => {
                 let output = (stderr || stdout || "").toString().trim();
                 if (output.length > 200) {
                     output = output.substring(0, 200) + "...";

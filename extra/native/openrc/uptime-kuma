@@ -1,0 +1,53 @@
+#!/sbin/openrc-run
+# OpenRC service for Uptime Kuma (no Docker)
+# Settings live in /etc/conf.d/uptime-kuma
+
+name="Uptime Kuma"
+description="Self-hosted monitoring tool"
+
+: "${UPTIME_KUMA_DIR:=/opt/uptime-kuma}"
+: "${UPTIME_KUMA_USER:=uptime-kuma}"
+: "${UPTIME_KUMA_GROUP:=uptime-kuma}"
+: "${UPTIME_KUMA_DATA_DIR:=/var/lib/uptime-kuma}"
+: "${UPTIME_KUMA_PORT:=3001}"
+: "${UPTIME_KUMA_HOST:=}"
+: "${UPTIME_KUMA_LOG:=/var/log/uptime-kuma/uptime-kuma.log}"
+: "${NODE_BIN:=/usr/bin/node}"
+: "${NODE_OPTS:=}"
+
+supervisor="supervise-daemon"
+command="$NODE_BIN"
+command_args="$NODE_OPTS server/server.js --data-dir=$UPTIME_KUMA_DATA_DIR --port=$UPTIME_KUMA_PORT"
+if [ -n "$UPTIME_KUMA_HOST" ]; then
+    command_args="$command_args --host=$UPTIME_KUMA_HOST"
+fi
+command_user="$UPTIME_KUMA_USER:$UPTIME_KUMA_GROUP"
+directory="$UPTIME_KUMA_DIR"
+output_log="$UPTIME_KUMA_LOG"
+error_log="$UPTIME_KUMA_LOG"
+
+# Restart if it crashes, give it time to shut down cleanly
+respawn_delay=5
+respawn_max=0
+retry="TERM/30/KILL/5"
+
+depend() {
+    need net
+    use dns logger
+    after firewall ntpd chronyd
+}
+
+start_pre() {
+    if [ ! -f "$UPTIME_KUMA_DIR/server/server.js" ]; then
+        eerror "Uptime Kuma is not installed in $UPTIME_KUMA_DIR"
+        return 1
+    fi
+    if [ ! -f "$UPTIME_KUMA_DIR/dist/index.html" ]; then
+        eerror "The web interface is not built ($UPTIME_KUMA_DIR/dist is missing)"
+        return 1
+    fi
+
+    checkpath --directory --owner "$command_user" --mode 0750 "$UPTIME_KUMA_DATA_DIR"
+    checkpath --directory --owner "$command_user" --mode 0750 "${UPTIME_KUMA_LOG%/*}"
+    checkpath --file --owner "$command_user" --mode 0640 "$UPTIME_KUMA_LOG"
+}

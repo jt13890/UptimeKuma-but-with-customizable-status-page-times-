@@ -1,0 +1,19 @@
+# Settings for the Uptime Kuma OpenRC service (/etc/init.d/uptime-kuma)
+# Apply changes with: rc-service uptime-kuma restart
+
+# Port and address of the web interface (empty host = all addresses)
+#UPTIME_KUMA_PORT=3001
+#UPTIME_KUMA_HOST=
+
+# Where the database, uploads and settings are stored
+#UPTIME_KUMA_DATA_DIR=/var/lib/uptime-kuma
+
+# Where the app is installed and which user runs it
+#UPTIME_KUMA_DIR=/opt/uptime-kuma
+#UPTIME_KUMA_USER=uptime-kuma
+#UPTIME_KUMA_GROUP=uptime-kuma
+
+#UPTIME_KUMA_LOG=/var/log/uptime-kuma/uptime-kuma.log
+
+# Extra options for Node.js. On devices with little RAM, capping the heap helps, e.g.:
+#NODE_OPTS="--max-old-space-size=256"
