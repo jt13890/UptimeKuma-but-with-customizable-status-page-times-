@@ -3,35 +3,33 @@ const assert = require("node:assert");
 const { TCPMonitorType } = require("../../../server/monitor-types/tcp");
 const { UP, PENDING } = require("../../../src/util");
 const net = require("net");
+const tls = require("node:tls");
+const { retryExternalService } = require("../test-util");
+
+// Long-lived self-signed certificate for "localhost", only used by the local test server below.
+const TEST_TLS_CERT = `
+-----BEGIN CERTIFICATE-----
+MIIBmzCCAUGgAwIBAgIULOZ/IPXjnktyuutdVTqyHOYVJAswCgYIKoZIzj0EAwIw
+FDESMBAGA1UEAwwJbG9jYWxob3N0MCAXDTI2MDkxNjEwMjQyM1oYDzIxMjYwODIz
+MTAyNDIzWjAUMRIwEAYDVQQDDAlsb2NhbGhvc3QwWTATBgcqhkjOPQIBBggqhkjO
+PQMBBwNCAASqopjGRvobCZ0LTWtHKPL/hUkNIBC9sO/zmHS+KbzZnbv6rYWzrEq4
+kmykegJ1XlpjrhAvnaKrUC+EhLPKVIKho28wbTAdBgNVHQ4EFgQU5PjoP18qZSQb
+M9I2fOFi/IelGz0wHwYDVR0jBBgwFoAU5PjoP18qZSQbM9I2fOFi/IelGz0wDwYD
+VR0TAQH/BAUwAwEB/zAaBgNVHREEEzARgglsb2NhbGhvc3SHBH8AAAEwCgYIKoZI
+zj0EAwIDSAAwRQIhAIIhPs4ZhDTiBAUdXYhZI2/dzIffT4vfcewYM0Aa8DmDAiAU
+gF9s+ViNQIIXMYU1Su2ulLAVBkwXwBNbsznHhA4fCg==
+-----END CERTIFICATE-----
+`;
+
+const TEST_TLS_KEY = `
+-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg1r5pxb+fJfjjPm4l
+tpS2kbUpNgRYIL2YX1/Vwi1ZjV6hRANCAASqopjGRvobCZ0LTWtHKPL/hUkNIBC9
+sO/zmHS+KbzZnbv6rYWzrEq4kmykegJ1XlpjrhAvnaKrUC+EhLPKVIKh
+-----END PRIVATE KEY-----
+`;
 
 describe("TCP Monitor", () => {
-    /**
-     * Retries a test function with exponential backoff for external service reliability
-     * @param {Function} testFn - Async function to retry
-     * @param {object} heartbeat - Heartbeat object to reset between attempts
-     * @param {number} maxAttempts - Maximum number of retry attempts (default: 5)
-     * @returns {Promise<void>}
-     */
-    async function retryExternalService(testFn, heartbeat, maxAttempts = 5) {
-        let lastError;
-        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-            try {
-                await testFn();
-                return; // Success, exit retry loop
-            } catch (error) {
-                lastError = error;
-                // Reset heartbeat for next attempt
-                heartbeat.msg = "";
-                heartbeat.status = PENDING;
-                // Wait a bit before retrying with exponential backoff
-                if (attempt < maxAttempts) {
-                    await new Promise(resolve => setTimeout(resolve, 500 * 2 ** (attempt - 1)));
-                }
-            }
-        }
-        // If all retries failed, throw the last error
-        throw lastError;
-    }
     /**
      * Creates a TCP server on a specified port
      * @param {number} port - The port number to listen on
@@ -45,7 +43,7 @@ describe("TCP Monitor", () => {
                 resolve(server);
             });
 
-            server.on("error", err => {
+            server.on("error", (err) => {
                 reject(err);
             });
         });
@@ -91,10 +89,7 @@ describe("TCP Monitor", () => {
             status: PENDING,
         };
 
-        await assert.rejects(
-            tcpMonitor.check(monitor, heartbeat, {}),
-            new Error("Connection failed")
-        );
+        await assert.rejects(tcpMonitor.check(monitor, heartbeat, {}), new Error("Connection failed"));
     });
 
     test("check() rejects when TLS certificate is expired or invalid", async () => {
@@ -105,7 +100,7 @@ describe("TCP Monitor", () => {
             port: 443,
             smtpSecurity: "secure",
             isEnabledExpiryNotification: () => true,
-            handleTlsInfo: async tlsInfo => {
+            handleTlsInfo: async (tlsInfo) => {
                 return tlsInfo;
             },
         };
@@ -118,10 +113,9 @@ describe("TCP Monitor", () => {
         // Regex: contains with "TLS Connection failed:" or "Certificate is invalid"
         const regex = /TLS Connection failed:|Certificate is invalid/;
 
-        await assert.rejects(
-            tcpMonitor.check(monitor, heartbeat, {}),
-            regex
-        );
+        await retryExternalService(async () => {
+            await assert.rejects(tcpMonitor.check(monitor, heartbeat, {}), regex);
+        });
     });
 
     test("check() sets status to UP when TLS certificate is valid (SSL)", async () => {
@@ -132,7 +126,7 @@ describe("TCP Monitor", () => {
             port: 465,
             smtpSecurity: "secure",
             isEnabledExpiryNotification: () => true,
-            handleTlsInfo: async tlsInfo => {
+            handleTlsInfo: async (tlsInfo) => {
                 return tlsInfo;
             },
         };
@@ -144,7 +138,7 @@ describe("TCP Monitor", () => {
 
         await retryExternalService(async () => {
             await tcpMonitor.check(monitor, heartbeat, {});
-        }, heartbeat);
+        });
         assert.strictEqual(heartbeat.status, UP);
     });
 
@@ -156,7 +150,7 @@ describe("TCP Monitor", () => {
             port: 587,
             smtpSecurity: "starttls",
             isEnabledExpiryNotification: () => true,
-            handleTlsInfo: async tlsInfo => {
+            handleTlsInfo: async (tlsInfo) => {
                 return tlsInfo;
             },
         };
@@ -168,7 +162,7 @@ describe("TCP Monitor", () => {
 
         await retryExternalService(async () => {
             await tcpMonitor.check(monitor, heartbeat, {});
-        }, heartbeat);
+        });
         assert.strictEqual(heartbeat.status, UP);
     });
 
@@ -180,7 +174,7 @@ describe("TCP Monitor", () => {
             port: 587,
             smtpSecurity: "starttls",
             isEnabledExpiryNotification: () => true,
-            handleTlsInfo: async tlsInfo => {
+            handleTlsInfo: async (tlsInfo) => {
                 return tlsInfo;
             },
         };
@@ -192,10 +186,9 @@ describe("TCP Monitor", () => {
 
         const regex = /does not match certificate/;
 
-        await assert.rejects(
-            tcpMonitor.check(monitor, heartbeat, {}),
-            regex
-        );
+        await retryExternalService(async () => {
+            await assert.rejects(tcpMonitor.check(monitor, heartbeat, {}), regex);
+        });
     });
     test("check() sets status to UP for XMPP server with valid certificate (STARTTLS)", async () => {
         const tcpMonitor = new TCPMonitorType();
@@ -205,7 +198,7 @@ describe("TCP Monitor", () => {
             port: 5222,
             smtpSecurity: "starttls",
             isEnabledExpiryNotification: () => true,
-            handleTlsInfo: async tlsInfo => {
+            handleTlsInfo: async (tlsInfo) => {
                 return tlsInfo;
             },
         };
@@ -217,8 +210,51 @@ describe("TCP Monitor", () => {
 
         await retryExternalService(async () => {
             await tcpMonitor.check(monitor, heartbeat, {});
-        }, heartbeat);
+        });
         assert.strictEqual(heartbeat.status, UP);
+    });
+
+    test("checkTlsCertificate() releases the TLS socket instead of leaving it half-open", async () => {
+        const tcpMonitor = new TCPMonitorType();
+
+        const openSockets = new Set();
+
+        // The server deliberately keeps its side of the connection open after receiving FIN
+        // (allowHalfOpen + no explicit close), so cleanup must not depend on the peer closing.
+        const server = tls.createServer({ key: TEST_TLS_KEY, cert: TEST_TLS_CERT, allowHalfOpen: true }, (socket) => {
+            openSockets.add(socket);
+            socket.on("close", () => openSockets.delete(socket));
+            socket.on("error", () => {});
+            socket.on("data", () => {});
+        });
+
+        await new Promise((resolve) => server.listen(0, resolve));
+        const port = server.address().port;
+
+        try {
+            const monitor = {
+                hostname: "localhost",
+                port: port,
+                smtpSecurity: "secure",
+                isEnabledExpiryNotification: () => true,
+                handleTlsInfo: async (tlsInfo) => tlsInfo,
+            };
+
+            await tcpMonitor.checkTlsCertificate(monitor, { ca: TEST_TLS_CERT });
+
+            await new Promise((resolve) => setTimeout(resolve, 200));
+
+            assert.strictEqual(
+                [...openSockets].filter((socket) => !socket.destroyed).length,
+                0,
+                "checkTlsCertificate() left the TLS socket open after the check"
+            );
+        } finally {
+            for (const socket of openSockets) {
+                socket.destroy();
+            }
+            server.close();
+        }
     });
 
     // TLS Alert checking tests
@@ -245,7 +281,7 @@ describe("TCP Monitor", () => {
                 tcpMonitor.check(monitor, heartbeat, {}),
                 /Expected TLS alert 'certificate_required' but connection succeeded/
             );
-        }, heartbeat);
+        });
     });
 
     test("parseTlsAlertNumber() extracts alert number from error message", async () => {

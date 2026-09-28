@@ -2,7 +2,6 @@ import { expect, test } from "@playwright/test";
 import { login, restoreSqliteSnapshot, screenshot } from "../util-test";
 
 test.describe("Status Page", () => {
-
     test.beforeEach(async ({ page }) => {
         await restoreSqliteSnapshot(page);
     });
@@ -127,16 +126,21 @@ test.describe("Status Page", () => {
         await expect(page.getByTestId("monitor-name")).toHaveAttribute("href", monitorCustomUrl);
 
         await expect(page.getByTestId("update-countdown-text")).toContainText("00:");
-        const updateCountdown = Number((await page.getByTestId("update-countdown-text").textContent()).match(/(\d+):(\d+)/)[2]);
-        expect(updateCountdown).toBeGreaterThanOrEqual(refreshInterval - 10); // cant be certain when the timer will start, so ensure it's within expected range
+        const updateCountdown = Number(
+            (await page.getByTestId("update-countdown-text").textContent()).match(/(\d+):(\d+)/)[2]
+        );
+        expect(updateCountdown).toBeGreaterThanOrEqual(refreshInterval - 10); // can't be certain when the timer will start, so ensure it's within expected range
         expect(updateCountdown).toBeLessThanOrEqual(refreshInterval);
 
         await expect(page.locator("body")).toHaveClass(theme);
 
         // Add Google Analytics ID to head and verify
-        await page.waitForFunction(() => {
-            return document.head.innerHTML.includes("https://www.googletagmanager.com/gtag/js?id=");
-        }, { timeout: 5000 });
+        await page.waitForFunction(
+            () => {
+                return document.head.innerHTML.includes("https://www.googletagmanager.com/gtag/js?id=");
+            },
+            { timeout: 5000 }
+        );
         expect(await page.locator("head").innerHTML()).toContain(googleAnalyticsId);
 
         const backgroundColor = await page.evaluate(() => window.getComputedStyle(document.body).backgroundColor);
@@ -178,9 +182,13 @@ test.describe("Status Page", () => {
         await page.getByTestId("analytics-id-input").fill(plausibleAnalyticsDomainsUrls);
         await page.getByTestId("save-button").click();
         await screenshot(testInfo, page);
-        await page.waitForFunction((scriptUrl) => {
-            return document.head.innerHTML.includes(scriptUrl);
-        }, plausibleAnalyticsScriptUrl, { timeout: 5000 });
+        await page.waitForFunction(
+            (scriptUrl) => {
+                return document.head.innerHTML.includes(scriptUrl);
+            },
+            plausibleAnalyticsScriptUrl,
+            { timeout: 5000 }
+        );
         expect(await page.locator("head").innerHTML()).toContain(plausibleAnalyticsScriptUrl);
         expect(await page.locator("head").innerHTML()).toContain(plausibleAnalyticsDomainsUrls);
 
@@ -191,9 +199,13 @@ test.describe("Status Page", () => {
         await page.getByTestId("analytics-id-input").fill(matomoSiteId);
         await page.getByTestId("save-button").click();
         await screenshot(testInfo, page);
-        await page.waitForFunction((url) => {
-            return document.head.innerHTML.includes(url);
-        }, matomoUrl, { timeout: 5000 });
+        await page.waitForFunction(
+            (url) => {
+                return document.head.innerHTML.includes(url);
+            },
+            matomoUrl,
+            { timeout: 5000 }
+        );
         expect(await page.locator("head").innerHTML()).toContain(matomoUrl);
         expect(await page.locator("head").innerHTML()).toContain(matomoSiteId);
     });
@@ -238,7 +250,7 @@ test.describe("Status Page", () => {
         expect(response.ok()).toBeTruthy();
         const data = await response.json();
         expect(data.heartbeatBarDays).toBe(90);
-        const [ monitorID ] = Object.keys(data.heartbeatBarList);
+        const [monitorID] = Object.keys(data.heartbeatBarList);
         expect(data.heartbeatBarList[monitorID]).toHaveLength(90);
         expect(data.uptimeList).toHaveProperty(`${monitorID}_90d`);
 
@@ -327,7 +339,7 @@ test.describe("Status Page", () => {
         // Attach RSS content for inspection
         await testInfo.attach("rss-feed.xml", {
             body: rssContent,
-            contentType: "application/xml"
+            contentType: "application/xml",
         });
 
         // Verify all payloads are escaped using CDATA
@@ -336,7 +348,7 @@ test.describe("Status Page", () => {
         expect(rssContent).toContain(`<title><![CDATA[${normalMonitorName} is down]]></title>`);
 
         // Verify RSS feed structure is valid
-        expect(rssContent).toContain("<?xml version=\"1.0\"");
+        expect(rssContent).toContain('<?xml version="1.0"');
         expect(rssContent).toContain("<rss");
         expect(rssContent).toContain("</rss>");
 
@@ -354,20 +366,26 @@ test.describe("Status Page", () => {
         await page.getByTestId("save-button").click();
         await expect(page.getByTestId("edit-sidebar")).toHaveCount(0);
 
-        // Fetch RSS feed again - should use custom RSS title
-        const rssResponseCustom = await page.request.get("/status/security-test/rss");
-        expect(rssResponseCustom.status()).toBe(200);
-        const rssContentCustom = await rssResponseCustom.text();
+        // Fetch RSS feed again - retry until custom title appears (DB write may not be committed yet)
+        let rssContentCustom;
+        for (let i = 0; i < 10; i++) {
+            const rssResponseCustom = await page.request.get("/status/security-test/rss");
+            expect(rssResponseCustom.status()).toBe(200);
+            rssContentCustom = await rssResponseCustom.text();
+            if (rssContentCustom.includes(`<title>${customRssTitle}</title>`)) {
+                break;
+            }
+            await page.waitForTimeout(500);
+        }
 
         // Verify RSS feed uses custom title
         expect(rssContentCustom).toContain(`<title>${customRssTitle}</title>`);
 
         await testInfo.attach("rss-feed-custom-title.xml", {
             body: rssContentCustom,
-            contentType: "application/xml"
+            contentType: "application/xml",
         });
 
         await screenshot(testInfo, page);
     });
-
 });

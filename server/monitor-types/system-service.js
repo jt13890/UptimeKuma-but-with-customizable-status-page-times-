@@ -32,17 +32,19 @@ class SystemServiceMonitorType extends MonitorType {
      * @returns {Promise<void>} Resolves when check is complete.
      */
     async check(monitor, heartbeat) {
-        if (!monitor.system_service_name) {
+        const serviceName = (monitor.system_service_name || "").trim();
+
+        if (!serviceName) {
             throw new Error("Service Name is required.");
         }
 
         if (process.platform === "win32") {
-            return this.checkWindows(monitor.system_service_name, heartbeat);
+            return this.checkWindows(serviceName, heartbeat);
         } else if (process.platform === "linux") {
-            return this.checkLinux(monitor.system_service_name, heartbeat);
-        } else {
-            throw new Error(`System Service monitoring is not supported on ${process.platform}`);
+            return this.checkLinux(serviceName, heartbeat);
         }
+
+        throw new Error(`System Service monitoring is not supported on ${process.platform}`);
     }
 
     /**
@@ -61,12 +63,12 @@ class SystemServiceMonitorType extends MonitorType {
             }
 
             let cmd = "systemctl";
-            let args = [ "is-active", serviceName ];
+            let args = ["is-active", serviceName];
 
             if (SystemServiceMonitorType.getLinuxInitSystem() === "openrc") {
                 // Exits with 0 only if the service is started ("stopped" and "crashed" are non-zero)
                 cmd = "rc-service";
-                args = [ serviceName, "status" ];
+                args = [serviceName, "status"];
             }
 
             childProcess.execFile(cmd, args, { timeout: 5000 }, (error, stdout, stderr) => {
@@ -98,9 +100,7 @@ class SystemServiceMonitorType extends MonitorType {
         return new Promise((resolve, reject) => {
             // SECURITY: Validate service name to reduce command-injection risk
             if (!/^[A-Za-z0-9._-]+$/.test(serviceName)) {
-                throw new Error(
-                    "Invalid service name. Only alphanumeric characters and '.', '_', '-' are allowed."
-                );
+                throw new Error("Invalid service name. Only alphanumeric characters and '.', '_', '-' are allowed.");
             }
 
             const cmd = "powershell";
@@ -108,8 +108,7 @@ class SystemServiceMonitorType extends MonitorType {
                 "-NoProfile",
                 "-NonInteractive",
                 "-Command",
-                // Single quotes around the service name
-                `(Get-Service -Name '${serviceName.replaceAll("'", "''")}').Status`
+                `(Get-Service -Name '${serviceName.replaceAll("'", "''")}').Status`,
             ];
 
             childProcess.execFile(cmd, args, { timeout: 5000 }, (error, stdout, stderr) => {

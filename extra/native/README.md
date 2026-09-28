@@ -4,13 +4,13 @@
 It is made for postmarketOS and Alpine Linux (musl only, no glibc needed) and works on old
 kernels down to Linux 3.10 (e.g. 3.10.108).
 
-| What          | Where                                                       |
-| ------------- | ----------------------------------------------------------- |
-| App           | `/opt/uptime-kuma` (previous version: `/opt/uptime-kuma.old`) |
-| Data          | `/var/lib/uptime-kuma`                                      |
-| Settings      | `/etc/conf.d/uptime-kuma` (port, data folder, Node options) |
-| Log           | `/var/log/uptime-kuma/uptime-kuma.log`                      |
-| Service       | `rc-service uptime-kuma start / stop / restart / status`    |
+| What     | Where                                                         |
+| -------- | ------------------------------------------------------------- |
+| App      | `/opt/uptime-kuma` (previous version: `/opt/uptime-kuma.old`) |
+| Data     | `/var/lib/uptime-kuma`                                        |
+| Settings | `/etc/conf.d/uptime-kuma` (port, data folder, Node options)   |
+| Log      | `/var/log/uptime-kuma/uptime-kuma.log`                        |
+| Service  | `rc-service uptime-kuma start / stop / restart / status`      |
 
 ## Install
 

@@ -2,7 +2,6 @@ const { describe, test, mock } = require("node:test");
 const assert = require("node:assert");
 const { GameDigMonitorType } = require("../../../server/monitor-types/gamedig");
 const { UP, PENDING } = require("../../../src/util");
-const net = require("net");
 const { GameDig } = require("gamedig");
 
 describe("GameDig Monitor", () => {
@@ -40,14 +39,13 @@ describe("GameDig Monitor", () => {
         }
     });
 
-    test("check() resolves hostname to IP address when hostname is not an IP", async () => {
+    test("check() passes hostname directly to GameDig when hostname is not an IP", async () => {
         const gamedigMonitor = new GameDigMonitorType();
 
+        let capturedOptions = null;
+
         mock.method(GameDig, "query", async (options) => {
-            assert.ok(
-                net.isIP(options.host) !== 0,
-                `Expected IP address, got ${options.host}`
-            );
+            capturedOptions = options;
             return {
                 name: "Test Server",
                 ping: 50,
@@ -69,6 +67,7 @@ describe("GameDig Monitor", () => {
         try {
             await gamedigMonitor.check(monitor, heartbeat, {});
 
+            assert.strictEqual(capturedOptions.host, "localhost");
             assert.strictEqual(heartbeat.status, UP);
             assert.strictEqual(heartbeat.msg, "Test Server");
             assert.strictEqual(heartbeat.ping, 50);
@@ -77,7 +76,7 @@ describe("GameDig Monitor", () => {
         }
     });
 
-    test("check() uses IP address directly without DNS resolution when hostname is IPv4", async () => {
+    test("check() passes IPv4 address directly to GameDig", async () => {
         const gamedigMonitor = new GameDigMonitorType();
 
         let capturedOptions = null;
@@ -112,7 +111,7 @@ describe("GameDig Monitor", () => {
         }
     });
 
-    test("check() uses IP address directly without DNS resolution when hostname is IPv6", async () => {
+    test("check() passes IPv6 address directly to GameDig", async () => {
         const gamedigMonitor = new GameDigMonitorType();
 
         let capturedOptions = null;
@@ -234,29 +233,6 @@ describe("GameDig Monitor", () => {
             status: PENDING,
         };
 
-        await assert.rejects(
-            gamedigMonitor.check(monitor, heartbeat, {}),
-            /Error/
-        );
-    });
-
-    test("resolveHostname() returns IP address when given valid hostname", async () => {
-        const gamedigMonitor = new GameDigMonitorType();
-
-        const resolvedIP = await gamedigMonitor.resolveHostname("localhost");
-
-        assert.ok(
-            net.isIP(resolvedIP) !== 0,
-            `Expected valid IP address, got ${resolvedIP}`
-        );
-    });
-
-    test("resolveHostname() rejects when DNS resolution fails for invalid hostname", async () => {
-        const gamedigMonitor = new GameDigMonitorType();
-
-        await assert.rejects(
-            gamedigMonitor.resolveHostname("this-domain-definitely-does-not-exist-12345.invalid"),
-            /DNS resolution failed/
-        );
+        await assert.rejects(gamedigMonitor.check(monitor, heartbeat, {}), /Error/);
     });
 });

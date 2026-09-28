@@ -1,29 +1,56 @@
 <template>
     <div class="form-container">
         <div class="form">
-            <form @submit.prevent="submit">
-                <h1 class="h3 mb-3 fw-normal" />
-
+            <form aria-label="Login Form" class="pt-3" @submit.prevent="submit">
                 <div v-if="!tokenRequired" class="form-floating">
-                    <input id="floatingInput" v-model="username" type="text" class="form-control" placeholder="Username" autocomplete="username" required>
+                    <input
+                        id="floatingInput"
+                        v-model="username"
+                        type="text"
+                        class="form-control"
+                        placeholder="Username"
+                        autocomplete="username"
+                        required
+                    />
                     <label for="floatingInput">{{ $t("Username") }}</label>
                 </div>
 
-                <div v-if="!tokenRequired" class="form-floating mt-3">
-                    <input id="floatingPassword" v-model="password" type="password" class="form-control" placeholder="Password" autocomplete="current-password" required>
-                    <label for="floatingPassword">{{ $t("Password") }}</label>
+                <div v-if="!tokenRequired" class="mt-3">
+                    <HiddenInput
+                        id="floatingPassword"
+                        v-model="password"
+                        :placeholder="$t('Password')"
+                        autocomplete="current-password"
+                        :required="true"
+                    />
                 </div>
 
                 <div v-if="tokenRequired">
                     <div class="form-floating mt-3">
-                        <input id="otp" ref="otpInput" v-model="token" type="text" maxlength="6" class="form-control" placeholder="123456" autocomplete="one-time-code" required>
+                        <input
+                            id="otp"
+                            ref="otpInput"
+                            v-model="token"
+                            type="text"
+                            maxlength="6"
+                            class="form-control"
+                            placeholder="123456"
+                            autocomplete="one-time-code"
+                            required
+                        />
                         <label for="otp">{{ $t("Token") }}</label>
                     </div>
                 </div>
 
                 <div class="form-check mb-3 mt-3 d-flex justify-content-center pe-4">
                     <div class="form-check">
-                        <input id="remember" v-model="$root.remember" type="checkbox" value="remember-me" class="form-check-input">
+                        <input
+                            id="remember"
+                            v-model="$root.remember"
+                            type="checkbox"
+                            value="remember-me"
+                            class="form-check-input"
+                        />
 
                         <label class="form-check-label" for="remember">
                             {{ $t("Remember me") }}
@@ -43,7 +70,12 @@
 </template>
 
 <script>
+import HiddenInput from "./HiddenInput.vue";
+
 export default {
+    components: {
+        HiddenInput,
+    },
     data() {
         return {
             processing: false,
@@ -62,7 +94,7 @@ export default {
                     this.$refs.otpInput?.focus();
                 });
             }
-        }
+        },
     },
 
     mounted() {

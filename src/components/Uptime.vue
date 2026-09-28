@@ -85,18 +85,17 @@ export default {
 
         title() {
             if (this.type === "1y") {
-                return `1 ${this.$tc("year", 1)}`;
+                return this.$t("years", 1);
             }
             if (this.type === "720") {
-                return `30 ${this.$tc("day", 30)}`;
+                return this.$t("days", 30);
             }
             // e.g. "90d", used by status pages with a history range
             if (/^\d+d$/.test(this.type)) {
-                const days = parseInt(this.type);
-                return `${days} ${this.$tc("day", days)}`;
+                return this.$t("days", parseInt(this.type));
             }
-            return `24 ${this.$tc("hour", 24)}`;
-        }
+            return this.$t("hours", 24);
+        },
     },
 };
 </script>

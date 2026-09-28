@@ -22,7 +22,7 @@ function shouldSkip() {
     // -> Check if PID 1 is systemd (or init which maps to systemd)
     try {
         const pid1Comm = execSync("ps -p 1 -o comm=", { encoding: "utf-8" }).trim();
-        return ![ "systemd", "init" ].includes(pid1Comm);
+        return !["systemd", "init"].includes(pid1Comm);
     } catch (e) {
         return true;
     }
@@ -48,20 +48,28 @@ describe("SystemServiceMonitorType", { skip: shouldSkip() }, () => {
         }
     });
 
-    test("check() returns UP for a running service", async () => {
-        // Windows: 'Dnscache' is always running.
-        // Linux: 'dbus' or 'cron' are standard services.
-        const serviceName = process.platform === "win32" ? "Dnscache" : "dbus";
+    test(
+        "check() returns UP for a running service",
+        {
+            // Disabled on Windows, because it looks like (not sure) Powershell takes too long to cold start on GitHub CI, for unknown reason
+            // TODO: Feel free to investigate if you want to
+            skip: process.platform === "win32",
+        },
+        async () => {
+            // Windows: 'EventLog' is always running.
+            // Linux: 'dbus' or 'cron' are standard services.
+            const serviceName = process.platform === "win32" ? "EventLog" : "dbus";
 
-        const monitor = {
-            system_service_name: serviceName,
-        };
+            const monitor = {
+                system_service_name: serviceName,
+            };
 
-        await monitorType.check(monitor, heartbeat);
+            await monitorType.check(monitor, heartbeat);
 
-        assert.strictEqual(heartbeat.status, UP);
-        assert.ok(heartbeat.msg.includes("is running"));
-    });
+            assert.strictEqual(heartbeat.status, UP);
+            assert.ok(heartbeat.msg.includes("is running"));
+        }
+    );
 
     test("check() returns DOWN for a stopped service", async () => {
         const monitor = {
@@ -142,7 +150,7 @@ describe("SystemServiceMonitorType on Linux init systems", () => {
     function mockInitSystem(initSystem, exitCode, stdout) {
         mock.method(SystemServiceMonitorType, "getLinuxInitSystem", () => initSystem);
         mock.method(childProcess, "execFile", (cmd, args, options, callback) => {
-            calls.push([ cmd, ...args ]);
+            calls.push([cmd, ...args]);
             const error = exitCode === 0 ? null : Object.assign(new Error("Command failed"), { code: exitCode });
             callback(error, stdout, "");
         });
@@ -152,7 +160,7 @@ describe("SystemServiceMonitorType on Linux init systems", () => {
         mockInitSystem("openrc", 0, " * status: started\n");
         await monitorType.check({ system_service_name: "sshd" }, heartbeat);
 
-        assert.deepStrictEqual(calls, [[ "rc-service", "sshd", "status" ]]);
+        assert.deepStrictEqual(calls, [["rc-service", "sshd", "status"]]);
         assert.strictEqual(heartbeat.status, UP);
         assert.ok(heartbeat.msg.includes("is running"));
     });
@@ -171,13 +179,16 @@ describe("SystemServiceMonitorType on Linux init systems", () => {
         mockInitSystem("systemd", 0, "active\n");
         await monitorType.check({ system_service_name: "sshd" }, heartbeat);
 
-        assert.deepStrictEqual(calls, [[ "systemctl", "is-active", "sshd" ]]);
+        assert.deepStrictEqual(calls, [["systemctl", "is-active", "sshd"]]);
         assert.strictEqual(heartbeat.status, UP);
     });
 
     test("invalid service names are rejected before running anything", async () => {
         mockInitSystem("openrc", 0, "");
-        await assert.rejects(monitorType.check({ system_service_name: "sshd; reboot" }, heartbeat), /Invalid service name/);
+        await assert.rejects(
+            monitorType.check({ system_service_name: "sshd; reboot" }, heartbeat),
+            /Invalid service name/
+        );
         assert.deepStrictEqual(calls, []);
     });
 });

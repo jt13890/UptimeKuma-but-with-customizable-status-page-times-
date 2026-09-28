@@ -36,8 +36,10 @@ if (fs.existsSync(dbConfigPath)) {
 }
 
 if (dbType === "embedded-mariadb") {
-    fail("this data uses the embedded MariaDB of the Docker image, which only exists in Docker. " +
-        "Export a backup or switch that install to SQLite or an external MariaDB first.");
+    fail(
+        "this data uses the embedded MariaDB of the Docker image, which only exists in Docker. " +
+            "Export a backup or switch that install to SQLite or an external MariaDB first."
+    );
 }
 
 if (dbType === "mariadb") {
@@ -64,7 +66,9 @@ db.all("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'knex_mig
 
     // Databases from 1.x have no knex migrations yet, they are upgraded on first start
     if (tables.length === 0) {
-        console.log("Data from Uptime Kuma 1.x, it will be upgraded on first start (this can take a while for big databases).");
+        console.log(
+            "Data from Uptime Kuma 1.x, it will be upgraded on first start (this can take a while for big databases)."
+        );
         db.close();
         return;
     }
@@ -76,12 +80,14 @@ db.all("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'knex_mig
         db.close();
 
         const known = new Set(fs.readdirSync(migrationsDir));
-        const unknown = rows.map(row => row.name).filter(name => !known.has(name));
+        const unknown = rows.map((row) => row.name).filter((name) => !known.has(name));
 
         if (unknown.length > 0) {
-            fail("this data comes from a newer Uptime Kuma than this version, which doesn't know these database changes:\n  " +
-                unknown.join("\n  ") +
-                "\nUpdate this version first (merge the newer upstream release into it).");
+            fail(
+                "this data comes from a newer Uptime Kuma than this version, which doesn't know these database changes:\n  " +
+                    unknown.join("\n  ") +
+                    "\nUpdate this version first (merge the newer upstream release into it)."
+            );
         }
 
         console.log("Data is compatible.");

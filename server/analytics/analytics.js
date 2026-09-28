@@ -2,6 +2,7 @@ const googleAnalytics = require("./google-analytics");
 const umamiAnalytics = require("./umami-analytics");
 const plausibleAnalytics = require("./plausible-analytics");
 const matomoAnalytics = require("./matomo-analytics");
+const rybbitAnalytics = require("./rybbit-analytics");
 
 /**
  * Returns a string that represents the javascript that is required to insert the selected Analytics' script
@@ -16,9 +17,14 @@ function getAnalyticsScript(statusPage) {
         case "umami":
             return umamiAnalytics.getUmamiAnalyticsScript(statusPage.analyticsScriptUrl, statusPage.analyticsId);
         case "plausible":
-            return plausibleAnalytics.getPlausibleAnalyticsScript(statusPage.analyticsScriptUrl, statusPage.analyticsId);
+            return plausibleAnalytics.getPlausibleAnalyticsScript(
+                statusPage.analyticsScriptUrl,
+                statusPage.analyticsId
+            );
         case "matomo":
             return matomoAnalytics.getMatomoAnalyticsScript(statusPage.analyticsScriptUrl, statusPage.analyticsId);
+        case "rybbit":
+            return rybbitAnalytics.getRybbitAnalyticsScript(statusPage.analyticsScriptUrl, statusPage.analyticsId);
         default:
             return null;
     }
@@ -36,6 +42,7 @@ function isValidAnalyticsConfig(statusPage) {
         case "umami":
         case "plausible":
         case "matomo":
+        case "rybbit":
             return statusPage.analyticsId != null && statusPage.analyticsScriptUrl != null;
         default:
             return false;
@@ -44,5 +51,5 @@ function isValidAnalyticsConfig(statusPage) {
 
 module.exports = {
     getAnalyticsScript,
-    isValidAnalyticsConfig
+    isValidAnalyticsConfig,
 };
