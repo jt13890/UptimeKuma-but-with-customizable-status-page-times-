@@ -38,7 +38,6 @@ if (process.platform === "win32") {
         allowedList.push(drive + ":\\Program Files\\Google\\Chrome\\Application\\chrome.exe");
         allowedList.push(drive + ":\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe");
     }
-
 } else if (process.platform === "linux") {
     allowedList = [
         "chromium",
@@ -48,7 +47,7 @@ if (process.platform === "win32") {
         "/usr/bin/chromium",
         "/usr/bin/chromium-browser",
         "/usr/bin/google-chrome",
-        "/snap/bin/chromium",           // Ubuntu
+        "/snap/bin/chromium", // Ubuntu
     ];
 } else if (process.platform === "darwin") {
     allowedList = [
@@ -63,7 +62,6 @@ if (process.platform === "win32") {
  * @returns {Promise<boolean>} The executable is allowed?
  */
 async function isAllowedChromeExecutable(executablePath) {
-    console.log(config.args);
     if (config.args["allow-all-chrome-exec"] || process.env.UPTIME_KUMA_ALLOW_ALL_CHROME_EXEC === "1") {
         return true;
     }
@@ -102,7 +100,7 @@ async function getBrowser() {
  */
 async function getRemoteBrowser(remoteBrowserID, userId) {
     let remoteBrowser = await RemoteBrowser.get(remoteBrowserID, userId);
-    log.debug("MONITOR", `Using remote browser: ${remoteBrowser.name} (${remoteBrowser.id})`);
+    log.debug("chromium", `Using remote browser: ${remoteBrowser.name} (${remoteBrowser.id})`);
     browser = await chromium.connect(remoteBrowser.url);
     return browser;
 }
@@ -120,42 +118,59 @@ async function prepareChromeExecutable(executablePath) {
     } else if (!executablePath) {
         if (process.env.UPTIME_KUMA_IS_CONTAINER) {
             executablePath = "/usr/bin/chromium";
-
-            // Install chromium in container via apt install
-            if (! await commandExists(executablePath)) {
-                await new Promise((resolve, reject) => {
-                    log.info("Chromium", "Installing Chromium...");
-                    let child = childProcess.exec("apt update && apt --yes --no-install-recommends install chromium fonts-indic fonts-noto fonts-noto-cjk");
-
-                    // On exit
-                    child.on("exit", (code) => {
-                        log.info("Chromium", "apt install chromium exited with code " + code);
-
-                        if (code === 0) {
-                            log.info("Chromium", "Installed Chromium");
-                            let version = childProcess.execSync(executablePath + " --version").toString("utf8");
-                            log.info("Chromium", "Chromium version: " + version);
-                            resolve();
-                        } else if (code === 100) {
-                            reject(new Error("Installing Chromium, please wait..."));
-                        } else {
-                            reject(new Error("apt install chromium failed with code " + code));
-                        }
-                    });
-                });
-            }
-
+            await installChromiumViaApt(executablePath);
         } else {
             executablePath = await findChrome(allowedList);
         }
     } else {
         // User specified a path
         // Check if the executablePath is in the list of allowed
-        if (!await isAllowedChromeExecutable(executablePath)) {
-            throw new Error("This Chromium executable path is not allowed by default. If you are sure this is safe, please add an environment variable UPTIME_KUMA_ALLOW_ALL_CHROME_EXEC=1 to allow it.");
+        if (!(await isAllowedChromeExecutable(executablePath))) {
+            throw new Error(
+                "This Chromium executable path is not allowed by default. If you are sure this is safe, please add an environment variable UPTIME_KUMA_ALLOW_ALL_CHROME_EXEC=1 to allow it."
+            );
         }
     }
     return executablePath;
+}
+
+/**
+ * Installs Chromium and required font packages via APT if the Chromium executable
+ * is not already available.
+ * @async
+ * @param {string} executablePath - Path to the Chromium executable used to check
+ * whether Chromium is available and to query its version after installation.
+ * @returns {Promise<void>} Resolves when Chromium is successfully installed or
+ * when no installation is required.
+ * @throws {Error} If the APT installation fails or exits with an unexpected
+ * exit code.
+ */
+async function installChromiumViaApt(executablePath) {
+    if (await commandExists(executablePath)) {
+        return;
+    }
+    await new Promise((resolve, reject) => {
+        log.info("chromium", "Installing Chromium...");
+        let child = childProcess.exec(
+            "apt update && apt --yes --no-install-recommends install chromium fonts-indic fonts-noto fonts-noto-cjk"
+        );
+
+        // On exit
+        child.on("exit", (code) => {
+            log.info("chromium", "apt install chromium exited with code " + code);
+
+            if (code === 0) {
+                log.info("chromium", "Installed Chromium");
+                let version = childProcess.execSync(executablePath + " --version").toString("utf8");
+                log.info("chromium", "Chromium version: " + version);
+                resolve();
+            } else if (code === 100) {
+                reject(new Error("Installing Chromium, please wait..."));
+            } else {
+                reject(new Error("apt install chromium failed with code " + code));
+            }
+        });
+    });
 }
 
 /**
@@ -201,7 +216,7 @@ async function testChrome(executablePath) {
     try {
         executablePath = await prepareChromeExecutable(executablePath);
 
-        log.info("Chromium", "Testing Chromium executable: " + executablePath);
+        log.info("chromium", "Testing Chromium executable: " + executablePath);
 
         const browser = await chromium.launch({
             executablePath,
@@ -229,46 +244,54 @@ async function testRemoteBrowser(remoteBrowserURL) {
     }
 }
 class RealBrowserMonitorType extends MonitorType {
-
     name = "real-browser";
 
     /**
      * @inheritdoc
      */
     async check(monitor, heartbeat, server) {
-        const browser = monitor.remote_browser ? await getRemoteBrowser(monitor.remote_browser, monitor.user_id) : await getBrowser();
+        const browser = monitor.remote_browser
+            ? await getRemoteBrowser(monitor.remote_browser, monitor.user_id)
+            : await getBrowser();
         const context = await browser.newContext();
-        const page = await context.newPage();
+        try {
+            const page = await context.newPage();
 
-        // Prevent Local File Inclusion
-        // Accept only http:// and https://
-        // https://github.com/louislam/uptime-kuma/security/advisories/GHSA-2qgm-m29m-cj2h
-        let url = new URL(monitor.url);
-        if (url.protocol !== "http:" && url.protocol !== "https:") {
-            throw new Error("Invalid url protocol, only http and https are allowed.");
-        }
+            // Prevent Local File Inclusion
+            // Accept only http:// and https://
+            // https://github.com/louislam/uptime-kuma/security/advisories/GHSA-2qgm-m29m-cj2h
+            let url = new URL(monitor.url);
+            if (url.protocol !== "http:" && url.protocol !== "https:") {
+                throw new Error("Invalid url protocol, only http and https are allowed.");
+            }
 
-        const res = await page.goto(monitor.url, {
-            waitUntil: "networkidle",
-            timeout: monitor.interval * 1000 * 0.8,
-        });
+            const res = await page.goto(monitor.url, {
+                waitUntil: "networkidle",
+                timeout: monitor.interval * 1000 * 0.8,
+            });
 
-        let filename = jwt.sign(monitor.id, server.jwtSecret) + ".png";
+            // Wait for additional time before taking screenshot if configured
+            if (monitor.screenshot_delay > 0) {
+                await page.waitForTimeout(monitor.screenshot_delay);
+            }
 
-        await page.screenshot({
-            path: path.join(Database.screenshotDir, filename),
-        });
+            let filename = jwt.sign(monitor.id, server.jwtSecret) + ".png";
 
-        await context.close();
+            await page.screenshot({
+                path: path.join(Database.screenshotDir, filename),
+            });
 
-        if (res.status() >= 200 && res.status() < 400) {
-            heartbeat.status = UP;
-            heartbeat.msg = res.status();
+            if (res.status() >= 200 && res.status() < 400) {
+                heartbeat.status = UP;
+                heartbeat.msg = res.status();
 
-            const timing = res.request().timing();
-            heartbeat.ping = timing.responseEnd;
-        } else {
-            throw new Error(res.status() + "");
+                const timing = res.request().timing();
+                heartbeat.ping = timing.responseEnd;
+            } else {
+                throw new Error(res.status() + "");
+            }
+        } finally {
+            await context.close();
         }
     }
 }

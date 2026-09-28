@@ -1,11 +1,14 @@
 <template>
     <div
         class="tag-wrapper rounded d-inline-flex"
-        :class="{ 'px-3': size == 'normal',
-                  'py-1': size == 'normal',
-                  'm-2': size == 'normal',
-                  'px-2': size == 'sm',
-                  'py-0': size == 'sm',
+        :class="{
+            'px-3': size == 'normal',
+            'py-1': size == 'normal',
+            'm-2': size == 'normal',
+            'px-2': size == 'sm',
+            'py-0': size == 'sm',
+            'tag-scrollable': scrollable,
+            'tag-constrained': constrained,
         }"
         :style="{ backgroundColor: item.color, fontSize: size == 'sm' ? '0.7em' : '1em' }"
     >
@@ -43,7 +46,22 @@ export default {
         size: {
             type: String,
             default: "normal",
-        }
+        },
+        /**
+         * Whether the tag text should be horizontally scrollable
+         * instead of truncated with ellipsis.
+         */
+        scrollable: {
+            type: Boolean,
+            default: false,
+        },
+        /**
+         * Whether the tag should be constrained to its parent's width.
+         */
+        constrained: {
+            type: Boolean,
+            default: false,
+        },
     },
     computed: {
         displayText() {
@@ -52,8 +70,8 @@ export default {
             } else {
                 return `${this.item.name}: ${this.item.value}`;
             }
-        }
-    }
+        },
+    },
 };
 </script>
 
@@ -72,6 +90,28 @@ export default {
     text-overflow: ellipsis;
     overflow: hidden;
     white-space: nowrap;
+}
+
+.tag-constrained {
+    max-width: 100%;
+
+    .tag-text {
+        max-width: 100%;
+    }
+}
+
+.tag-scrollable .tag-text {
+    overflow: auto;
+    text-overflow: clip;
+    scrollbar-width: none;
+    display: inline-block;
+    -ms-overflow-style: none;
+
+    &::-webkit-scrollbar {
+        width: 0;
+        height: 0;
+        display: none;
+    }
 }
 
 .btn-remove {

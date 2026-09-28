@@ -63,8 +63,6 @@ class GroupMonitorType extends MonitorType {
             return;
         }
 
-        heartbeat.status = DOWN;
-
         let message = `Child monitors down: ${downChildren.join(", ")}`;
 
         if (pendingChildren.length > 0) {
@@ -79,4 +77,3 @@ class GroupMonitorType extends MonitorType {
 module.exports = {
     GroupMonitorType,
 };
-

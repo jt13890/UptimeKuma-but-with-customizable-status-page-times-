@@ -206,7 +206,7 @@ class UptimeCalculator {
      * @param {number} status status
      * @param {number} ping Ping
      * @param {dayjs.Dayjs} date Date (Only for migration)
-     * @returns {dayjs.Dayjs} date
+     * @returns {Promise<dayjs.Dayjs>} date
      * @throws {Error} Invalid status
      */
     async update(status, ping = 0, date) {
@@ -217,7 +217,7 @@ class UptimeCalculator {
         let flatStatus = this.flatStatus(status);
 
         if (flatStatus === DOWN && ping > 0) {
-            log.debug("uptime-calc", "The ping is not effective when the status is DOWN");
+            log.debug("uptime_calc", "The ping is not effective when the status is DOWN");
         }
 
         let divisionKey = this.getMinutelyKey(date);
@@ -232,7 +232,6 @@ class UptimeCalculator {
             minutelyData.maintenance = minutelyData.maintenance ? minutelyData.maintenance + 1 : 1;
             hourlyData.maintenance = hourlyData.maintenance ? hourlyData.maintenance + 1 : 1;
             dailyData.maintenance = dailyData.maintenance ? dailyData.maintenance + 1 : 1;
-
         } else if (flatStatus === UP) {
             minutelyData.up += 1;
             hourlyData.up += 1;
@@ -276,7 +275,6 @@ class UptimeCalculator {
                     dailyData.maxPing = Math.max(dailyData.maxPing, ping);
                 }
             }
-
         } else if (flatStatus === DOWN) {
             minutelyData.down += 1;
             hourlyData.down += 1;
@@ -297,7 +295,7 @@ class UptimeCalculator {
 
         // Don't store data in test mode
         if (process.env.TEST_BACKEND) {
-            log.debug("uptime-calc", "Skip storing data in test mode");
+            log.debug("uptime_calc", "Skip storing data in test mode");
             return date;
         }
 
@@ -360,15 +358,15 @@ class UptimeCalculator {
         if (!this.migrationMode) {
             // Remove the old data
             // TODO: Improvement: Convert it to a job?
-            log.debug("uptime-calc", "Remove old data");
+            log.debug("uptime_calc", "Remove old data");
             await R.exec("DELETE FROM stat_minutely WHERE monitor_id = ? AND timestamp < ?", [
                 this.monitorID,
-                this.getMinutelyKey(currentDate.subtract(this.statMinutelyKeepHour, "hour")),
+                this.getMinutelyKey(currentDate.subtract(this.statMinutelyKeepHour, "hour"), false),
             ]);
 
             await R.exec("DELETE FROM stat_hourly WHERE monitor_id = ? AND timestamp < ?", [
                 this.monitorID,
-                this.getHourlyKey(currentDate.subtract(this.statHourlyKeepDay, "day")),
+                this.getHourlyKey(currentDate.subtract(this.statHourlyKeepDay, "day"), false),
             ]);
         }
 
@@ -385,10 +383,7 @@ class UptimeCalculator {
             return this.lastDailyStatBean;
         }
 
-        let bean = await R.findOne("stat_daily", " monitor_id = ? AND timestamp = ?", [
-            this.monitorID,
-            timestamp,
-        ]);
+        let bean = await R.findOne("stat_daily", " monitor_id = ? AND timestamp = ?", [this.monitorID, timestamp]);
 
         if (!bean) {
             bean = R.dispense("stat_daily");
@@ -410,10 +405,7 @@ class UptimeCalculator {
             return this.lastHourlyStatBean;
         }
 
-        let bean = await R.findOne("stat_hourly", " monitor_id = ? AND timestamp = ?", [
-            this.monitorID,
-            timestamp,
-        ]);
+        let bean = await R.findOne("stat_hourly", " monitor_id = ? AND timestamp = ?", [this.monitorID, timestamp]);
 
         if (!bean) {
             bean = R.dispense("stat_hourly");
@@ -435,10 +427,7 @@ class UptimeCalculator {
             return this.lastMinutelyStatBean;
         }
 
-        let bean = await R.findOne("stat_minutely", " monitor_id = ? AND timestamp = ?", [
-            this.monitorID,
-            timestamp,
-        ]);
+        let bean = await R.findOne("stat_minutely", " monitor_id = ? AND timestamp = ?", [this.monitorID, timestamp]);
 
         if (!bean) {
             bean = R.dispense("stat_minutely");
@@ -453,16 +442,17 @@ class UptimeCalculator {
     /**
      * Convert timestamp to minutely key
      * @param {dayjs.Dayjs} date The heartbeat date
+     * @param {boolean} createIfMissing Whether to create a missing bucket, defaults to true
      * @returns {number} Timestamp
      */
-    getMinutelyKey(date) {
+    getMinutelyKey(date, createIfMissing = true) {
         // Truncate value to minutes (e.g. 2021-01-01 12:34:56 -> 2021-01-01 12:34:00)
         date = date.startOf("minute");
 
         // Convert to timestamp in second
         let divisionKey = date.unix();
 
-        if (! (divisionKey in this.minutelyUptimeDataList)) {
+        if (createIfMissing && !(divisionKey in this.minutelyUptimeDataList)) {
             this.minutelyUptimeDataList.push(divisionKey, {
                 up: 0,
                 down: 0,
@@ -478,16 +468,17 @@ class UptimeCalculator {
     /**
      * Convert timestamp to hourly key
      * @param {dayjs.Dayjs} date The heartbeat date
+     * @param {boolean} createIfMissing Whether to create a missing bucket, defaults to true
      * @returns {number} Timestamp
      */
-    getHourlyKey(date) {
+    getHourlyKey(date, createIfMissing = true) {
         // Truncate value to hours (e.g. 2021-01-01 12:34:56 -> 2021-01-01 12:00:00)
         date = date.startOf("hour");
 
         // Convert to timestamp in second
         let divisionKey = date.unix();
 
-        if (! (divisionKey in this.hourlyUptimeDataList)) {
+        if (createIfMissing && !(divisionKey in this.hourlyUptimeDataList)) {
             this.hourlyUptimeDataList.push(divisionKey, {
                 up: 0,
                 down: 0,
@@ -503,15 +494,16 @@ class UptimeCalculator {
     /**
      * Convert timestamp to daily key
      * @param {dayjs.Dayjs} date The heartbeat date
+     * @param {boolean} createIfMissing Whether to create a missing bucket, defaults to true
      * @returns {number} Timestamp
      */
-    getDailyKey(date) {
+    getDailyKey(date, createIfMissing = true) {
         // Truncate value to start of day (e.g. 2021-01-01 12:34:56 -> 2021-01-01 00:00:00)
         // Considering if the user keep changing could affect the calculation, so use UTC time to avoid this problem.
         date = date.utc().startOf("day");
         let dailyKey = date.unix();
 
-        if (!this.dailyUptimeDataList[dailyKey]) {
+        if (createIfMissing && !this.dailyUptimeDataList[dailyKey]) {
             this.dailyUptimeDataList.push(dailyKey, {
                 up: 0,
                 down: 0,
@@ -569,7 +561,6 @@ class UptimeCalculator {
      * @throws {Error} The maximum number of minutes greater than 1440
      */
     getData(num, type = "day") {
-
         if (type === "hour" && num > 24 * 30) {
             throw new Error("The maximum number of hours is 720");
         }
@@ -817,8 +808,8 @@ class UptimeCalculator {
 
         for (let i = 0; i < numBuckets; i++) {
             // Spread the units as evenly as possible, so the buckets always cover the full range
-            const startUnit = Math.floor(i * numUnits / numBuckets);
-            const endUnit = Math.floor((i + 1) * numUnits / numBuckets);
+            const startUnit = Math.floor((i * numUnits) / numBuckets);
+            const endUnit = Math.floor(((i + 1) * numUnits) / numBuckets);
 
             const bucket = {
                 start: firstKey + startUnit * unitSeconds,
@@ -872,8 +863,7 @@ class UptimeCalculator {
             case "y":
                 return this.getData(365 * num, "day");
             default:
-                throw new Error(`Unsupported unit (${unit}) for badge duration ${duration}`
-                );
+                throw new Error(`Unsupported unit (${unit}) for badge duration ${duration}`);
         }
     }
 
@@ -928,19 +918,11 @@ class UptimeCalculator {
      * @returns {Promise<void>}
      */
     static async clearStatistics(monitorID) {
-        await R.exec("DELETE FROM heartbeat WHERE monitor_id = ?", [
-            monitorID
-        ]);
+        await R.exec("DELETE FROM heartbeat WHERE monitor_id = ?", [monitorID]);
 
-        await R.exec("DELETE FROM stat_minutely WHERE monitor_id = ?", [
-            monitorID
-        ]);
-        await R.exec("DELETE FROM stat_hourly WHERE monitor_id = ?", [
-            monitorID
-        ]);
-        await R.exec("DELETE FROM stat_daily WHERE monitor_id = ?", [
-            monitorID
-        ]);
+        await R.exec("DELETE FROM stat_minutely WHERE monitor_id = ?", [monitorID]);
+        await R.exec("DELETE FROM stat_hourly WHERE monitor_id = ?", [monitorID]);
+        await R.exec("DELETE FROM stat_daily WHERE monitor_id = ?", [monitorID]);
 
         await UptimeCalculator.remove(monitorID);
     }

@@ -1,5 +1,7 @@
 # Copilot Instructions for Uptime Kuma
 
+Warning: Only maintainers of Uptime Kuma can use this instructions, for other contributors, must read AGENTS.md and CLAUDE.md to avoid to get banned because of AI slop.
+
 ## Copilot's Goals/Tasks
 
 - Check spelling
@@ -18,22 +20,26 @@
 ## Build & Validation Commands
 
 ### Prerequisites
+
 - Node.js >= 20.4.0, npm >= 9.3, Git
 
 ### Essential Command Sequence
 
 1. **Install Dependencies**:
+
    ```bash
    npm ci  # Use npm ci NOT npm install (~60-90 seconds)
    ```
 
 2. **Linting** (required before committing):
+
    ```bash
    npm run lint         # Both linters (~15-30 seconds)
    npm run lint:prod    # For production (zero warnings)
    ```
 
 3. **Build Frontend**:
+
    ```bash
    npm run build  # Takes ~90-120 seconds, builds to dist/
    ```
@@ -105,6 +111,7 @@ npm run dev  # Starts frontend (port 3000) and backend (port 3001)
 ## CI/CD Workflows
 
 **auto-test.yml** (runs on PR/push to master/1.23.X):
+
 - Linting, building, backend tests on multiple OS/Node versions (15 min timeout)
 - E2E Playwright tests
 
@@ -129,7 +136,7 @@ npm run dev  # Starts frontend (port 3000) and backend (port 3001)
 
 ## Database
 
-- Primary: SQLite (also supports MariaDB/MySQL/PostgreSQL)
+- Primary: SQLite (also supports MariaDB/MySQL)
 - Migrations in `db/knex_migrations/` using Knex.js
 - Filename format validated by CI: `node ./extra/check-knex-filenames.mjs`
 
@@ -142,7 +149,9 @@ npm run dev  # Starts frontend (port 3000) and backend (port 3001)
 ## Adding New Features
 
 ### New Notification Provider
+
 Files to modify:
+
 1. `server/notification-providers/PROVIDER_NAME.js` (backend logic)
 2. `server/notification.js` (register provider)
 3. `src/components/notifications/PROVIDER_NAME.vue` (frontend UI)
@@ -151,7 +160,9 @@ Files to modify:
 6. `src/lang/en.json` (add translation keys)
 
 ### New Monitor Type
+
 Files to modify:
+
 1. `server/monitor-types/MONITORING_TYPE.js` (backend logic)
 2. `server/uptime-kuma-server.js` (register monitor type)
 3. `src/pages/EditMonitor.vue` (frontend UI)
