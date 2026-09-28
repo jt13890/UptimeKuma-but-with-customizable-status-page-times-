@@ -4,7 +4,7 @@ const { UptimeKumaServer } = require("../uptime-kuma-server");
 const StatusPage = require("../model/status_page");
 const { allowDevAllOrigin, sendHttpError } = require("../util-server");
 const { R } = require("redbean-node");
-const { badgeConstants, UP, DOWN, PENDING, MAINTENANCE } = require("../../src/util");
+const { badgeConstants, UP, DOWN, MAINTENANCE } = require("../../src/util");
 const dayjs = require("dayjs");
 const { makeBadge } = require("badge-maker");
 const { UptimeCalculator } = require("../uptime-calculator");
@@ -152,25 +152,20 @@ function getHeartbeatBars(uptimeCalculator, days, maxBeats) {
 
     return uptimeCalculator.getAggregatedBuckets(days, maxBeats).map((bucket) => {
         const total = bucket.up + bucket.down;
-        let status = null;
-        let partial = false;
 
-        if (bucket.down > 0) {
-            // Some downtime shows as orange, down for the whole bar shows as red
-            partial = bucket.up > 0;
-            status = partial ? PENDING : DOWN;
-        } else if (bucket.maintenance > 0) {
-            status = MAINTENANCE;
-        } else if (bucket.up > 0) {
-            status = UP;
-        }
+        // Show what the monitor was for most of the bar, so a short blip doesn't color a whole day.
+        // On a tie, the worse status wins. No checks at all = no data (null).
+        const [status, count] = [
+            [DOWN, bucket.down],
+            [MAINTENANCE, bucket.maintenance],
+            [UP, bucket.up],
+        ].reduce((best, candidate) => (candidate[1] > best[1] ? candidate : best));
 
         return {
-            status,
+            status: count > 0 ? status : null,
             time: format(bucket.start),
             endTime: format(Math.min(bucket.end, now)),
             uptime: total > 0 ? bucket.up / total : null,
-            partial,
         };
     });
 }

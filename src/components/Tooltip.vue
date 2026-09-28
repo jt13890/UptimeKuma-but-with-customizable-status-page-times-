@@ -69,11 +69,6 @@ export default {
                 return this.$t("Unknown");
             }
 
-            // Aggregated bar with some downtime
-            if (this.content.partial) {
-                return this.$t("Degraded Service");
-            }
-
             switch (this.content.status) {
                 case DOWN:
                     return this.$t("Down");
