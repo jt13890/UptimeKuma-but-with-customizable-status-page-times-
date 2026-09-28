@@ -71,6 +71,7 @@ Requirements:
 
 - Platform
   - ✅ Major Linux distros such as Debian, Ubuntu, Fedora and ArchLinux etc.
+  - ✅ postmarketOS / Alpine Linux (musl, OpenRC), including old kernels down to 3.10: see [below](#-postmarketos--alpine-linux-openrc)
   - ✅ Windows 10 (x64), Windows Server 2012 R2 (x64) or higher
   - ❌ FreeBSD / OpenBSD / NetBSD
   - ❌ Replit / Heroku
@@ -79,8 +80,9 @@ Requirements:
 - [pm2](https://pm2.keymetrics.io/) - For running Uptime Kuma in the background
 
 ```bash
-git clone https://github.com/louislam/uptime-kuma.git
+git clone https://github.com/jt13890/UptimeKuma-but-with-customizable-status-page-times-.git uptime-kuma
 cd uptime-kuma
+# Installs the dependencies and builds the web interface
 npm run setup
 
 # Option 1. Try it
@@ -104,6 +106,19 @@ pm2 monit
 # If you want to add it to startup
 pm2 startup && pm2 save
 ```
+
+### 📱 postmarketOS / Alpine Linux (OpenRC)
+
+An install script sets Uptime Kuma up as an OpenRC service, running as its own user:
+
+```sh
+doas apk add git
+git clone https://github.com/jt13890/UptimeKuma-but-with-customizable-status-page-times-.git uptime-kuma
+cd uptime-kuma
+doas sh extra/native/install.sh
+```
+
+It can also move over the data of an existing Uptime Kuma (Docker or not) with `--import-data`. See [extra/native/README.md](extra/native/README.md) for the details, updating, and devices with little RAM.
 
 ### Advanced Installation
 

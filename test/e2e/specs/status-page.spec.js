@@ -229,6 +229,8 @@ test.describe("Status Page", () => {
 
         await page.getByTestId("save-button").click();
         await expect(page.getByTestId("edit-sidebar")).toHaveCount(0);
+        // Saving reloads the page, wait for it so it can't interrupt the edit below
+        await page.waitForURL("/status/history-range");
         await expect(page.getByTestId("monitor")).toHaveCount(1);
 
         // One bar per day, aggregated by the server
