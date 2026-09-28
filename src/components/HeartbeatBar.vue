@@ -143,7 +143,11 @@ export default {
 
             // If heartbeat days is configured (not auto), data is already aggregated from server
             if (this.normalizedHeartbeatBarDays > 0 && this.beatList.length > 0) {
-                // Show all beats from server - they are already properly aggregated
+                // Show all beats from server - they are already properly aggregated.
+                // Until the server has aggregated them to our width, show only what fits.
+                if (this.maxBeat > 0 && this.beatList.length > this.maxBeat) {
+                    return this.beatList.slice(-this.maxBeat);
+                }
                 return this.beatList;
             }
 
@@ -246,7 +250,8 @@ export default {
          */
         timeSinceLastBeat() {
             const lastValidBeat = this.shortBeatList.at(-1);
-            const seconds = dayjs().diff(dayjs.utc(lastValidBeat?.time), "seconds");
+            // Aggregated bars cover a time range, so measure from the end of it
+            const seconds = dayjs().diff(dayjs.utc(lastValidBeat?.endTime ?? lastValidBeat?.time), "seconds");
 
             let tolerance = 60 * 2; // default for when monitorList not available
             if (this.$root.monitorList[this.monitorId] != null) {
@@ -325,6 +330,11 @@ export default {
         hoveredBeatIndex() {
             this.drawCanvas();
         },
+
+        normalizedHeartbeatBarDays() {
+            // The history range can be known only after mounting (loaded with the heartbeat data)
+            this.notifyMaxBeatChanged();
+        },
     },
     unmounted() {
         window.removeEventListener("resize", this.resize);
@@ -378,21 +388,30 @@ export default {
             if (this.$refs.wrap) {
                 const newMaxBeat = Math.floor(this.$refs.wrap.clientWidth / (this.beatWidth + this.beatHoverAreaPadding * 2));
 
-                // If maxBeat changed and we're in configured days mode, notify parent to reload data
-                if (newMaxBeat !== this.maxBeat && this.normalizedHeartbeatBarDays > 0) {
+                if (newMaxBeat !== this.maxBeat) {
                     this.maxBeat = newMaxBeat;
-
-                    // Find the closest parent with reloadHeartbeatData method (StatusPage)
-                    let parent = this.$parent;
-                    while (parent && !parent.reloadHeartbeatData) {
-                        parent = parent.$parent;
-                    }
-                    if (parent && parent.reloadHeartbeatData) {
-                        parent.reloadHeartbeatData(newMaxBeat);
-                    }
-                } else {
-                    this.maxBeat = newMaxBeat;
+                    this.notifyMaxBeatChanged();
                 }
+            }
+        },
+
+        /**
+         * In configured days mode, the server aggregates the bars to fit our width,
+         * so tell the parent (StatusPage) how many bars fit, so it can reload the data.
+         * @returns {void}
+         */
+        notifyMaxBeatChanged() {
+            if (this.normalizedHeartbeatBarDays <= 0 || this.maxBeat <= 0) {
+                return;
+            }
+
+            // Find the closest parent with reloadHeartbeatData method (StatusPage)
+            let parent = this.$parent;
+            while (parent && !parent.reloadHeartbeatData) {
+                parent = parent.$parent;
+            }
+            if (parent && parent.reloadHeartbeatData) {
+                parent.reloadHeartbeatData(this.maxBeat);
             }
         },
 

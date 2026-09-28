@@ -15,6 +15,7 @@
                     </div>
                     <div class="tooltip-time">{{ timeText }}</div>
                     <div v-if="content?.msg" class="tooltip-message">{{ content.msg }}</div>
+                    <div v-if="uptimeText" class="tooltip-message">{{ uptimeText }}</div>
                 </slot>
             </div>
             <div class="tooltip-arrow" :class="{ 'arrow-above': position === 'above' }"></div>
@@ -68,6 +69,11 @@ export default {
                 return this.$t("Unknown");
             }
 
+            // Aggregated bar with some downtime
+            if (this.content.partial) {
+                return this.$t("Degraded Service");
+            }
+
             switch (this.content.status) {
                 case DOWN:
                     return this.$t("Down");
@@ -105,7 +111,24 @@ export default {
             if (!this.content || this.content === 0) {
                 return "";
             }
+            // Aggregated bars cover a time range
+            if (this.content.endTime) {
+                const format = "YYYY-MM-DD HH:mm";
+                return `${this.$root.datetimeFormat(this.content.time, format)} - ${this.$root.datetimeFormat(this.content.endTime, format)}`;
+            }
             return this.$root.datetime(this.content.time);
+        },
+
+        /**
+         * Uptime of an aggregated bar, e.g. "99.5% uptime"
+         * @returns {string|null} Formatted uptime or null if not an aggregated bar
+         */
+        uptimeText() {
+            if (this.content?.uptime === null || this.content?.uptime === undefined) {
+                return null;
+            }
+            const percentage = Math.round(this.content.uptime * 10000) / 100;
+            return this.$t("statusPageBarUptime", [ percentage + "%" ]);
         },
     }
 };

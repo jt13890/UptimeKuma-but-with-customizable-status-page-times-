@@ -44,6 +44,63 @@ describe("Uptime Calculator", () => {
         assert.strictEqual(date.unix(), dayjs.utc("2023-08-12 20:47:20").unix());
     });
 
+    describe("getAggregatedBuckets()", () => {
+        test("daily buckets for 90 days, oldest first", async () => {
+            let c = new UptimeCalculator();
+            const now = dayjs.utc("2025-06-30 12:00:00");
+
+            // 89 days ago: up, 10 days ago: up and down, today: down
+            UptimeCalculator.currentDate = now.subtract(89, "day");
+            await c.update(UP);
+            UptimeCalculator.currentDate = now.subtract(10, "day");
+            await c.update(UP);
+            await c.update(DOWN);
+            UptimeCalculator.currentDate = now.subtract(1, "hour");
+            await c.update(MAINTENANCE);
+            UptimeCalculator.currentDate = now;
+            await c.update(DOWN);
+
+            const buckets = c.getAggregatedBuckets(90, 100);
+            assert.strictEqual(buckets.length, 90);
+
+            const todayKey = dayjs.utc("2025-06-30").unix();
+            assert.strictEqual(buckets[0].start, todayKey - 89 * 86400);
+            assert.strictEqual(buckets[89].start, todayKey);
+            assert.strictEqual(buckets[89].end, todayKey + 86400);
+
+            assert.deepStrictEqual([ buckets[0].up, buckets[0].down ], [ 1, 0 ]);
+            assert.deepStrictEqual([ buckets[79].up, buckets[79].down ], [ 1, 1 ]);
+            assert.deepStrictEqual([ buckets[89].up, buckets[89].down, buckets[89].maintenance ], [ 0, 1, 1 ]);
+            assert.deepStrictEqual([ buckets[50].up, buckets[50].down ], [ 0, 0 ]);
+        });
+
+        test("fewer buckets than units still cover the whole range without gaps", () => {
+            UptimeCalculator.currentDate = dayjs.utc("2025-06-30 12:00:00");
+            let c = new UptimeCalculator();
+
+            for (const [ days, maxBuckets, unitSeconds ] of [[ 90, 60, 86400 ], [ 7, 50, 3600 ], [ 1, 37, 60 ]]) {
+                const buckets = c.getAggregatedBuckets(days, maxBuckets);
+                assert.strictEqual(buckets.length, maxBuckets);
+
+                for (let i = 1; i < buckets.length; i++) {
+                    assert.strictEqual(buckets[i].start, buckets[i - 1].end);
+                    assert.ok(buckets[i].end > buckets[i].start);
+                }
+
+                const covered = buckets.at(-1).end - buckets[0].start;
+                const expectedUnits = unitSeconds === 86400 ? days : days * 86400 / unitSeconds;
+                assert.strictEqual(covered, expectedUnits * unitSeconds);
+            }
+        });
+
+        test("number of buckets is limited by the number of units", () => {
+            UptimeCalculator.currentDate = dayjs.utc("2025-06-30 12:00:00");
+            let c = new UptimeCalculator();
+            assert.strictEqual(c.getAggregatedBuckets(7, 500).length, 7 * 24);
+            assert.strictEqual(c.getAggregatedBuckets(60, 500).length, 60);
+        });
+    });
+
     test("flatStatus() converts statuses correctly", () => {
         let c2 = new UptimeCalculator();
         assert.strictEqual(c2.flatStatus(UP), UP);

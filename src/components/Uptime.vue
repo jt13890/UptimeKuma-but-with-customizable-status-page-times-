@@ -90,6 +90,11 @@ export default {
             if (this.type === "720") {
                 return `30 ${this.$tc("day", 30)}`;
             }
+            // e.g. "90d", used by status pages with a history range
+            if (/^\d+d$/.test(this.type)) {
+                const days = parseInt(this.type);
+                return `${days} ${this.$tc("day", days)}`;
+            }
             return `24 ${this.$tc("hour", 24)}`;
         }
     },

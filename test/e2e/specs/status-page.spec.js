@@ -198,6 +198,62 @@ test.describe("Status Page", () => {
         expect(await page.locator("head").innerHTML()).toContain(matomoSiteId);
     });
 
+    test("history range", async ({ page }, testInfo) => {
+        test.setTimeout(60000);
+
+        const monitorName = "Monitor for History Range";
+
+        await page.goto("./add");
+        await login(page);
+        await expect(page.getByTestId("monitor-type-select")).toBeVisible();
+        await page.getByTestId("monitor-type-select").selectOption("http");
+        await page.getByTestId("friendly-name-input").fill(monitorName);
+        await page.getByTestId("url-input").fill("https://history-range.example.com");
+        await page.getByTestId("save-button").click();
+        await page.waitForURL("/dashboard/*");
+
+        await page.goto("./add-status-page");
+        await page.getByTestId("name-input").fill("History Range");
+        await page.getByTestId("slug-input").fill("history-range");
+        await page.getByTestId("submit-button").click();
+        await page.waitForURL("/status/history-range?edit");
+
+        // Defaults to the last 100 heartbeats
+        await expect(page.getByTestId("heartbeat-bar-days-select")).toHaveValue("0");
+        await page.getByTestId("heartbeat-bar-days-select").selectOption("90");
+
+        await page.getByTestId("add-group-button").click();
+        await page.getByTestId("group-name").fill("Services");
+        await page.getByTestId("monitor-select").click();
+        await page.getByTestId("monitor-select").getByRole("option", { name: monitorName }).click();
+
+        await page.getByTestId("save-button").click();
+        await expect(page.getByTestId("edit-sidebar")).toHaveCount(0);
+        await expect(page.getByTestId("monitor")).toHaveCount(1);
+
+        // One bar per day, aggregated by the server
+        const response = await page.request.get("/api/status-page/heartbeat/history-range?maxBeats=200");
+        expect(response.ok()).toBeTruthy();
+        const data = await response.json();
+        expect(data.heartbeatBarDays).toBe(90);
+        const [ monitorID ] = Object.keys(data.heartbeatBarList);
+        expect(data.heartbeatBarList[monitorID]).toHaveLength(90);
+        expect(data.uptimeList).toHaveProperty(`${monitorID}_90d`);
+
+        // Fewer bars when there is less room
+        const narrow = await (await page.request.get("/api/status-page/heartbeat/history-range?maxBeats=30")).json();
+        expect(narrow.heartbeatBarList[monitorID]).toHaveLength(30);
+
+        // The uptime pill covers the whole range
+        await expect(page.getByTestId("monitor").locator(".badge")).toHaveAttribute("title", "90 days");
+
+        await screenshot(testInfo, page);
+
+        // The setting is kept when editing again
+        await page.getByTestId("edit-button").click();
+        await expect(page.getByTestId("heartbeat-bar-days-select")).toHaveValue("90");
+    });
+
     // @todo Test certificate expiry
     // @todo Test domain names
 

@@ -56,7 +56,7 @@
                                                 @click="$refs.monitorSettingDialog.show(group, monitor)"
                                             />
                                             <Status v-if="showOnlyLastHeartbeat" :status="statusOfLastHeartbeat(monitor.element.id)" />
-                                            <Uptime v-else :monitor="monitor.element" type="24" :pill="true" />
+                                            <Uptime v-else :monitor="monitor.element" :type="uptimeType" :pill="true" />
                                             <a
                                                 v-if="showLink(monitor)"
                                                 :href="monitor.element.url"
@@ -79,7 +79,12 @@
                                         </div>
                                     </div>
                                     <div :key="$root.userHeartbeatBar" class="col-6">
-                                        <HeartbeatBar size="mid" :monitor-id="monitor.element.id" />
+                                        <HeartbeatBar
+                                            size="mid"
+                                            :monitor-id="monitor.element.id"
+                                            :heartbeat-list="heartbeatBarDays > 0 ? (heartbeatBarList[monitor.element.id] ?? []) : null"
+                                            :heartbeat-bar-days="heartbeatBarDays"
+                                        />
                                     </div>
                                 </div>
                             </div>
@@ -129,6 +134,16 @@ export default {
         showOnlyLastHeartbeat: {
             type: Boolean,
         },
+        /** How many days of history to show (0 = last 100 heartbeats) */
+        heartbeatBarDays: {
+            type: Number,
+            default: 0,
+        },
+        /** Aggregated heartbeat bars per monitor ID, used when heartbeatBarDays > 0 */
+        heartbeatBarList: {
+            type: Object,
+            default: () => ({}),
+        },
     },
     data() {
         return {
@@ -137,7 +152,15 @@ export default {
     computed: {
         showGroupDrag() {
             return (this.$root.publicGroupList.length >= 2);
-        }
+        },
+
+        /**
+         * Uptime period shown in the pill, matches the history range
+         * @returns {string} Uptime type, e.g. "24" (hours) or "90d"
+         */
+        uptimeType() {
+            return this.heartbeatBarDays > 0 ? `${this.heartbeatBarDays}d` : "24";
+        },
     },
     watch: {
         // No watchers needed - sorting is handled by GroupSortDropdown component
