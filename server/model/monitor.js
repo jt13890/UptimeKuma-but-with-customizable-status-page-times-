@@ -967,10 +967,10 @@ class Monitor extends BeanModel {
 
             bean.retries = retries;
 
-            if (bean.status !== MAINTENANCE && (await this.areOthersDown())) {
+            if (bean.status !== MAINTENANCE && (await this.isAnyOtherDown())) {
                 bean.msg = bean.msg
-                    ? `Degraded: other monitors are not responding (${bean.msg})`
-                    : "Degraded: other monitors are not responding";
+                    ? `Degraded: another monitor is not responding (${bean.msg})`
+                    : "Degraded: another monitor is not responding";
                 bean.status = DEGRADED;
             }
 
@@ -1411,11 +1411,11 @@ class Monitor extends BeanModel {
     }
 
     /**
-     * Should this monitor be degraded because the other monitors are not responding?
-     * Only active monitors (not groups) are taken into account, and every one of them must be DOWN.
-     * @returns {Promise<boolean>} True if the degraded option is on and all the other monitors are down
+     * Should this monitor be degraded because another monitor is not responding?
+     * Only active monitors (not groups) are taken into account, and one of them being DOWN is enough.
+     * @returns {Promise<boolean>} True if the degraded option is on and at least one other monitor is down
      */
-    async areOthersDown() {
+    async isAnyOtherDown() {
         if (!this.degradedByOthers) {
             return false;
         }
@@ -1436,7 +1436,7 @@ class Monitor extends BeanModel {
         }
 
         const others = await R.getAll(sql, params);
-        return others.length > 0 && others.every((other) => other.status === DOWN);
+        return others.some((other) => other.status === DOWN);
     }
 
     /**
