@@ -43,8 +43,17 @@ textarea.form-control {
     color: white;
 }
 
+.bg-degraded {
+    color: black !important;
+    background-color: $degraded !important;
+}
+
 .text-maintenance {
     color: $maintenance !important;
+}
+
+.text-degraded {
+    color: $degraded !important;
 }
 
 .incident a,

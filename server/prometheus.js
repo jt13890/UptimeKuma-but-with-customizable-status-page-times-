@@ -91,7 +91,7 @@ class Prometheus {
 
         monitorStatus = new PrometheusClient.Gauge({
             name: "monitor_status",
-            help: "Monitor Status (1 = UP, 0= DOWN, 2= PENDING, 3= MAINTENANCE)",
+            help: "Monitor Status (1 = UP, 0= DOWN, 2= PENDING, 3= MAINTENANCE, 4= DEGRADED)",
             labelNames: commonLabels,
         });
     }

@@ -26,6 +26,12 @@
                         </span>
                     </div>
                     <div class="col">
+                        <h3>{{ $t("Degraded") }}</h3>
+                        <span class="num" :class="$root.stats.degraded > 0 ? 'text-degraded' : 'text-secondary'">
+                            {{ $root.stats.degraded }}
+                        </span>
+                    </div>
+                    <div class="col">
                         <h3>{{ $t("Unknown") }}</h3>
                         <span class="num text-secondary">{{ $root.stats.unknown }}</span>
                     </div>

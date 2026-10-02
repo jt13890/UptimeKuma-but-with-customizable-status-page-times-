@@ -762,6 +762,8 @@ let needSetup = false;
 
                 monitor.rabbitmqNodes = JSON.stringify(monitor.rabbitmqNodes);
 
+                monitor.degradedDependsOn = JSON.stringify(Monitor.parseDegradedDependsOn(monitor.degradedDependsOn));
+
                 /*
                  * List of frontend-only properties that should not be saved to the database.
                  * Should clean up before saving to the database.
@@ -958,6 +960,8 @@ let needSetup = false;
                 bean.sshPrivateKey = monitor.sshPrivateKey;
                 bean.sshPassphrase = monitor.sshPassphrase;
                 bean.sshAuthMethod = monitor.sshAuthMethod;
+                bean.degradedByOthers = Boolean(monitor.degradedByOthers);
+                bean.degradedDependsOn = JSON.stringify(Monitor.parseDegradedDependsOn(monitor.degradedDependsOn));
                 bean.ntp_stratum_threshold = monitor.ntpStratumThreshold;
                 bean.ntp_time_offset_threshold = monitor.ntpTimeOffsetThreshold;
                 bean.ntp_root_dispersion_threshold = monitor.ntpRootDispersionThreshold;

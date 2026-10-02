@@ -8,6 +8,7 @@ const {
     DOWN,
     PENDING,
     MAINTENANCE,
+    DEGRADED,
     flipStatus,
     MIN_INTERVAL_SECOND,
     SQL_DATETIME_FORMAT,
@@ -71,6 +72,7 @@ const rootCertificates = rootCertificatesFingerprints();
  *      1 = UP
  *      2 = PENDING
  *      3 = MAINTENANCE
+ *      4 = DEGRADED
  */
 class Monitor extends BeanModel {
     /**
@@ -208,6 +210,8 @@ class Monitor extends BeanModel {
             expectedTlsAlert: this.expected_tls_alert,
             sftpPath: this.sftpPath,
             sshAuthMethod: this.sshAuthMethod || "password",
+            degradedByOthers: Boolean(this.degradedByOthers),
+            degradedDependsOn: JSON.parse(this.degradedDependsOn || "[]"),
 
             // ping advanced options
             ping_numeric: this.isPingNumeric(),
@@ -963,6 +967,13 @@ class Monitor extends BeanModel {
 
             bean.retries = retries;
 
+            if (bean.status !== MAINTENANCE && (await this.areOthersDown())) {
+                bean.msg = bean.msg
+                    ? `Degraded: other monitors are not responding (${bean.msg})`
+                    : "Degraded: other monitors are not responding";
+                bean.status = DEGRADED;
+            }
+
             log.debug("monitor", `[${this.name}] Check isImportant`);
             let isImportant = Monitor.isImportantBeat(isFirstBeat, previousBeat?.status, bean.status);
 
@@ -1048,6 +1059,8 @@ class Monitor extends BeanModel {
                 );
             } else if (bean.status === MAINTENANCE) {
                 log.warn("monitor", `Monitor #${this.id} '${this.name}': Under Maintenance | Type: ${this.type}`);
+            } else if (bean.status === DEGRADED) {
+                log.warn("monitor", `Monitor #${this.id} '${this.name}': ${bean.msg} | Type: ${this.type}`);
             } else {
                 log.warn(
                     "monitor",
@@ -1382,6 +1395,51 @@ class Monitor extends BeanModel {
     }
 
     /**
+     * Validate the list of monitor IDs a degraded option depends on
+     * @param {any} list Value received from the client
+     * @returns {number[]} Unique monitor IDs, empty if nothing valid was given
+     * @throws {Error} The list is not an array of integers
+     */
+    static parseDegradedDependsOn(list) {
+        if (list == null) {
+            return [];
+        }
+        if (!Array.isArray(list) || !list.every((id) => Number.isInteger(id))) {
+            throw new Error("degradedDependsOn must be an array of monitor IDs");
+        }
+        return [...new Set(list)];
+    }
+
+    /**
+     * Should this monitor be degraded because the other monitors are not responding?
+     * Only active monitors (not groups) are taken into account, and every one of them must be DOWN.
+     * @returns {Promise<boolean>} True if the degraded option is on and all the other monitors are down
+     */
+    async areOthersDown() {
+        if (!this.degradedByOthers) {
+            return false;
+        }
+
+        const dependsOn = JSON.parse(this.degradedDependsOn || "[]").filter((id) => id !== this.id);
+        let sql = `
+            SELECT heartbeat.status FROM monitor
+            LEFT JOIN heartbeat ON heartbeat.id = (
+                SELECT id FROM heartbeat WHERE monitor_id = monitor.id ORDER BY time DESC LIMIT 1
+            )
+            WHERE monitor.id != ? AND monitor.user_id = ? AND monitor.active = 1 AND monitor.type != 'group'
+        `;
+        const params = [this.id, this.user_id];
+
+        if (dependsOn.length > 0) {
+            sql += ` AND monitor.id IN (${dependsOn.map(() => "?").join(",")})`;
+            params.push(...dependsOn);
+        }
+
+        const others = await R.getAll(sql, params);
+        return others.length > 0 && others.every((other) => other.status === DOWN);
+    }
+
+    /**
      * Has status of monitor changed since last beat?
      * @param {boolean} isFirstBeat Is this the first beat of this monitor?
      * @param {const} previousBeatStatus Status of the previous beat
@@ -1404,8 +1462,12 @@ class Monitor extends BeanModel {
         // * MAINTENANCE -> DOWN = important
         // * DOWN -> MAINTENANCE = important
         // * UP -> MAINTENANCE = important
+        // * ANY -> DEGRADED = important
+        // * DEGRADED -> ANY = important
         return (
             isFirstBeat ||
+            (previousBeatStatus !== DEGRADED && currentBeatStatus === DEGRADED) ||
+            (previousBeatStatus === DEGRADED && currentBeatStatus !== DEGRADED) ||
             (previousBeatStatus === DOWN && currentBeatStatus === MAINTENANCE) ||
             (previousBeatStatus === UP && currentBeatStatus === MAINTENANCE) ||
             (previousBeatStatus === MAINTENANCE && currentBeatStatus === DOWN) ||
@@ -1439,8 +1501,12 @@ class Monitor extends BeanModel {
         // * MAINTENANCE -> DOWN = important
         // DOWN -> MAINTENANCE = not important
         // UP -> MAINTENANCE = not important
+        // ANY -> DEGRADED = not important
+        // * DEGRADED -> DOWN = important
+        // DEGRADED -> UP = not important
         return (
             isFirstBeat ||
+            (previousBeatStatus === DEGRADED && currentBeatStatus === DOWN) ||
             (previousBeatStatus === MAINTENANCE && currentBeatStatus === DOWN) ||
             (previousBeatStatus === UP && currentBeatStatus === DOWN) ||
             (previousBeatStatus === DOWN && currentBeatStatus === UP) ||

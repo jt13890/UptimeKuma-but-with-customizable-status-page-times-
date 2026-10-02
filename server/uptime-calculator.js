@@ -1,5 +1,5 @@
 const dayjs = require("dayjs");
-const { UP, MAINTENANCE, DOWN, PENDING } = require("../src/util");
+const { UP, MAINTENANCE, DOWN, PENDING, DEGRADED } = require("../src/util");
 const { LimitQueue } = require("./utils/limit-queue");
 const { log } = require("../src/util");
 const { R } = require("redbean-node");
@@ -232,6 +232,13 @@ class UptimeCalculator {
             minutelyData.maintenance = minutelyData.maintenance ? minutelyData.maintenance + 1 : 1;
             hourlyData.maintenance = hourlyData.maintenance ? hourlyData.maintenance + 1 : 1;
             dailyData.maintenance = dailyData.maintenance ? dailyData.maintenance + 1 : 1;
+        } else if (status === DEGRADED) {
+            // Degraded only counts as down in the minutely data (the last 24 hours).
+            // The hourly and daily data count it as up, so it can't pull down the uptime after that.
+            minutelyData.down += 1;
+            minutelyData.degraded = minutelyData.degraded ? minutelyData.degraded + 1 : 1;
+            hourlyData.up += 1;
+            dailyData.up += 1;
         } else if (flatStatus === UP) {
             minutelyData.up += 1;
             hourlyData.up += 1;
@@ -547,6 +554,9 @@ class UptimeCalculator {
             case UP:
             case MAINTENANCE:
                 return UP;
+            case DEGRADED:
+                // Not used for the stats, see update()
+                return UP;
             case DOWN:
             case PENDING:
                 return DOWN;
@@ -773,7 +783,7 @@ class UptimeCalculator {
      * which matches how long each kind of stat is kept in memory.
      * @param {number} days Number of days to cover (1 - 365)
      * @param {number} maxBuckets Maximum number of buckets to return
-     * @returns {Array<{start: number, end: number, up: number, down: number, maintenance: number}>}
+     * @returns {Array<{start: number, end: number, up: number, down: number, maintenance: number, degraded: number}>}
      * Buckets ordered from oldest to newest. start/end are unix timestamps, end is exclusive.
      */
     getAggregatedBuckets(days, maxBuckets) {
@@ -817,6 +827,7 @@ class UptimeCalculator {
                 up: 0,
                 down: 0,
                 maintenance: 0,
+                degraded: 0,
             };
 
             for (let unit = startUnit; unit < endUnit; unit++) {
@@ -825,6 +836,7 @@ class UptimeCalculator {
                     bucket.up += data.up || 0;
                     bucket.down += data.down || 0;
                     bucket.maintenance += data.maintenance || 0;
+                    bucket.degraded += data.degraded || 0;
                 }
             }
 

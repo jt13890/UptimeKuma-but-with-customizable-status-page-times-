@@ -9,6 +9,7 @@ const brotliDecompress = promisify(zlib.brotliDecompress);
  *      1 = UP
  *      2 = PENDING
  *      3 = MAINTENANCE
+ *      4 = DEGRADED
  */
 class Heartbeat extends BeanModel {
     /**

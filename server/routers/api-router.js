@@ -10,7 +10,7 @@ const { R } = require("redbean-node");
 const apicache = require("../modules/apicache");
 const Monitor = require("../model/monitor");
 const dayjs = require("dayjs");
-const { UP, MAINTENANCE, DOWN, PENDING, flipStatus, log, badgeConstants } = require("../../src/util");
+const { UP, MAINTENANCE, DOWN, PENDING, DEGRADED, flipStatus, log, badgeConstants } = require("../../src/util");
 const StatusPage = require("../model/status_page");
 const { UptimeKumaServer } = require("../uptime-kuma-server");
 const { makeBadge } = require("badge-maker");
@@ -86,6 +86,13 @@ router.all("/api/push/:pushToken", async (request, response) => {
             bean.status = MAINTENANCE;
         } else {
             determineStatus(statusFromParam, previousHeartbeat, monitor.maxretries, monitor.isUpsideDown(), bean);
+
+            if (await monitor.areOthersDown()) {
+                bean.status = DEGRADED;
+                bean.msg = bean.msg
+                    ? `Degraded: other monitors are not responding (${bean.msg})`
+                    : "Degraded: other monitors are not responding";
+            }
         }
 
         // Calculate uptime
@@ -154,10 +161,12 @@ router.get("/api/badge/:id/status", cache("5 minutes"), async (request, response
         downLabel = "Down",
         pendingLabel = "Pending",
         maintenanceLabel = "Maintenance",
+        degradedLabel = "Degraded",
         upColor = badgeConstants.defaultUpColor,
         downColor = badgeConstants.defaultDownColor,
         pendingColor = badgeConstants.defaultPendingColor,
         maintenanceColor = badgeConstants.defaultMaintenanceColor,
+        degradedColor = badgeConstants.defaultDegradedColor,
         style = badgeConstants.defaultStyle,
         value, // for demo purpose only
     } = request.query;
@@ -201,6 +210,10 @@ router.get("/api/badge/:id/status", cache("5 minutes"), async (request, response
                 case MAINTENANCE:
                     badgeValues.color = maintenanceColor;
                     badgeValues.message = maintenanceLabel;
+                    break;
+                case DEGRADED:
+                    badgeValues.color = degradedColor;
+                    badgeValues.message = degradedLabel;
                     break;
                 default:
                     badgeValues.color = badgeConstants.naColor;

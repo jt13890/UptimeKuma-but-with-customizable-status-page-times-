@@ -2296,6 +2296,45 @@
                                 />
                             </div>
 
+                            <!-- Degraded when other monitors are down -->
+                            <div class="my-3 form-check">
+                                <input
+                                    id="degraded-by-others"
+                                    v-model="monitor.degradedByOthers"
+                                    class="form-check-input"
+                                    type="checkbox"
+                                    data-testid="degraded-by-others"
+                                />
+                                <label class="form-check-label" for="degraded-by-others">
+                                    {{ $t("degradedByOthers") }}
+                                </label>
+                                <div class="form-text">
+                                    {{ $t("degradedByOthersDescription") }}
+                                </div>
+                            </div>
+
+                            <div v-if="monitor.degradedByOthers" class="my-3">
+                                <label for="degraded-depends-on" class="form-label">
+                                    {{ $t("degradedDependsOn") }}
+                                </label>
+                                <VueMultiselect
+                                    id="degraded-depends-on"
+                                    v-model="degradedDependsOnSelection"
+                                    :options="degradedDependsOnOptions"
+                                    :multiple="true"
+                                    :close-on-select="false"
+                                    :clear-on-select="false"
+                                    :preserve-search="true"
+                                    :placeholder="$t('degradedDependsOnPlaceholder')"
+                                    :max-height="300"
+                                    label="name"
+                                    track-by="id"
+                                ></VueMultiselect>
+                                <div class="form-text">
+                                    {{ $t("degradedDependsOnDescription") }}
+                                </div>
+                            </div>
+
                             <!-- Description -->
                             <div class="my-3">
                                 <label for="description" class="form-label">{{ $t("Description") }}</label>
@@ -3402,6 +3441,8 @@ const monitorDefaults = {
     retryInterval: 60,
     resendInterval: 0,
     maxretries: 0,
+    degradedByOthers: false,
+    degradedDependsOn: [],
     retryOnlyOnStatusCodeFailure: false,
     notificationIDList: {},
     ignoreTls: false,
@@ -3676,6 +3717,30 @@ message HealthCheckResponse {
                 }
             }
             return null;
+        },
+
+        /**
+         * Monitors the degraded option can depend on: everything except groups and itself
+         * @returns {Array<{id: number, name: string}>} Options for the multiselect, sorted by name
+         */
+        degradedDependsOnOptions() {
+            return Object.values(this.$root.monitorList)
+                .filter((monitor) => monitor.type !== "group" && monitor.id !== this.monitor.id)
+                .map((monitor) => ({
+                    id: monitor.id,
+                    name: monitor.pathName || monitor.name,
+                }))
+                .sort((m1, m2) => m1.name.localeCompare(m2.name));
+        },
+
+        degradedDependsOnSelection: {
+            get() {
+                const ids = this.monitor.degradedDependsOn || [];
+                return this.degradedDependsOnOptions.filter((option) => ids.includes(option.id));
+            },
+            set(selection) {
+                this.monitor.degradedDependsOn = selection.map((option) => option.id);
+            },
         },
 
         // Filter result by active state, weight and alphabetical

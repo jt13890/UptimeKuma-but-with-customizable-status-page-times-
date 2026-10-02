@@ -4,7 +4,7 @@ const { UptimeKumaServer } = require("../uptime-kuma-server");
 const StatusPage = require("../model/status_page");
 const { allowDevAllOrigin, sendHttpError } = require("../util-server");
 const { R } = require("redbean-node");
-const { badgeConstants, UP, DOWN, MAINTENANCE } = require("../../src/util");
+const { badgeConstants, UP, DOWN, MAINTENANCE, DEGRADED } = require("../../src/util");
 const dayjs = require("dayjs");
 const { makeBadge } = require("badge-maker");
 const { UptimeCalculator } = require("../uptime-calculator");
@@ -155,8 +155,10 @@ function getHeartbeatBars(uptimeCalculator, days, maxBeats) {
 
         // Show what the monitor was for most of the bar, so a short blip doesn't color a whole day.
         // On a tie, the worse status wins. No checks at all = no data (null).
+        // Degraded checks are counted as down in the bucket, so take them out of the down count.
         const [status, count] = [
-            [DOWN, bucket.down],
+            [DOWN, bucket.down - bucket.degraded],
+            [DEGRADED, bucket.degraded],
             [MAINTENANCE, bucket.maintenance],
             [UP, bucket.up],
         ].reduce((best, candidate) => (candidate[1] > best[1] ? candidate : best));
