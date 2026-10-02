@@ -24,7 +24,7 @@
 </template>
 
 <script>
-import { DOWN, UP, PENDING, MAINTENANCE } from "../util.ts";
+import { DOWN, UP, PENDING, MAINTENANCE, DEGRADED } from "../util.ts";
 
 export default {
     name: "Tooltip",
@@ -78,6 +78,8 @@ export default {
                     return this.$t("Pending");
                 case MAINTENANCE:
                     return this.$t("Maintenance");
+                case DEGRADED:
+                    return this.$t("Degraded");
                 default:
                     return this.$t("Unknown");
             }
@@ -97,6 +99,8 @@ export default {
                     return "status-pending";
                 case MAINTENANCE:
                     return "status-maintenance";
+                case DEGRADED:
+                    return "status-degraded";
                 default:
                     return "status-unknown";
             }
@@ -181,6 +185,10 @@ export default {
 
             &.status-maintenance {
                 color: $maintenance;
+            }
+
+            &.status-degraded {
+                color: $degraded;
             }
 
             &.status-empty {

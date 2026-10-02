@@ -652,6 +652,7 @@ import {
     STATUS_PAGE_PARTIAL_DOWN,
     UP,
     MAINTENANCE,
+    DEGRADED,
 } from "../util.ts";
 import Tag from "../components/Tag.vue";
 import VueMultiselect from "vue-multiselect";
@@ -835,6 +836,10 @@ export default {
                     return STATUS_PAGE_MAINTENANCE;
                 } else if (beat.status === UP) {
                     hasUp = true;
+                } else if (beat.status === DEGRADED) {
+                    // Still responding, but not fully working
+                    hasUp = true;
+                    status = STATUS_PAGE_PARTIAL_DOWN;
                 } else {
                     status = STATUS_PAGE_PARTIAL_DOWN;
                 }

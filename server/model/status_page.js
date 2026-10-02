@@ -17,6 +17,7 @@ const {
     STATUS_PAGE_PARTIAL_DOWN,
     UP,
     MAINTENANCE,
+    DEGRADED,
     DOWN,
     INCIDENT_PAGE_SIZE,
 } = require("../../src/util");
@@ -234,6 +235,10 @@ class StatusPage extends BeanModel {
                 return STATUS_PAGE_MAINTENANCE;
             } else if (beat.status === UP) {
                 hasUp = true;
+            } else if (beat.status === DEGRADED) {
+                // Still responding, but not fully working
+                hasUp = true;
+                status = STATUS_PAGE_PARTIAL_DOWN;
             } else {
                 status = STATUS_PAGE_PARTIAL_DOWN;
             }

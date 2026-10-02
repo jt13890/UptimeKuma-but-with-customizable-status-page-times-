@@ -71,6 +71,19 @@
                 </div>
             </li>
             <li>
+                <div class="dropdown-item" tabindex="0" @click.stop="toggleStatusFilter(4)">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <Status :status="4" />
+                        <span class="ps-3">
+                            {{ $root.stats.degraded }}
+                            <span v-if="filterState.status?.includes(4)" class="px-1 filter-active">
+                                <font-awesome-icon icon="check" />
+                            </span>
+                        </span>
+                    </div>
+                </div>
+            </li>
+            <li>
                 <hr class="dropdown-divider" />
             </li>
             <li>

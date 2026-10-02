@@ -44,7 +44,7 @@ import {
 } from "chart.js";
 import "chartjs-adapter-dayjs-4";
 import { Line } from "vue-chartjs";
-import { UP, DOWN, PENDING, MAINTENANCE } from "../util.ts";
+import { UP, DOWN, PENDING, MAINTENANCE, DEGRADED } from "../util.ts";
 
 Chart.register(
     LineController,
@@ -394,7 +394,13 @@ export default {
                 });
                 downData.push({
                     x,
-                    y: beat.status === DOWN || beat.status === MAINTENANCE || beat.status === PENDING ? 1 : 0,
+                    y:
+                        beat.status === DOWN ||
+                        beat.status === MAINTENANCE ||
+                        beat.status === PENDING ||
+                        beat.status === DEGRADED
+                            ? 1
+                            : 0,
                 });
                 switch (beat.status) {
                     case MAINTENANCE:
@@ -402,6 +408,9 @@ export default {
                         break;
                     case PENDING:
                         colorData.push("rgba(245, 182, 23, 0.41)");
+                        break;
+                    case DEGRADED:
+                        colorData.push("rgba(250, 204, 21, 0.41)");
                         break;
                     default:
                         colorData.push("rgba(220, 53, 69, 0.41)");

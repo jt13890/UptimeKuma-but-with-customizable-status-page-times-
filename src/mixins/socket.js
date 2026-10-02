@@ -5,7 +5,7 @@ import Favico from "favico.js";
 import dayjs from "dayjs";
 import mitt from "mitt";
 
-import { DOWN, MAINTENANCE, PENDING, UP } from "../util.ts";
+import { DEGRADED, DOWN, MAINTENANCE, PENDING, UP } from "../util.ts";
 import {
     getDevContainerServerHostname,
     isDevContainer,
@@ -785,6 +785,11 @@ export default {
                         text: this.$t("statusMaintenance"),
                         color: "maintenance",
                     };
+                } else if (lastHeartBeat.status === DEGRADED) {
+                    result[monitorID] = {
+                        text: this.$t("Degraded"),
+                        color: "degraded",
+                    };
                 } else {
                     result[monitorID] = unknown;
                 }
@@ -799,6 +804,7 @@ export default {
                 up: 0,
                 down: 0,
                 maintenance: 0,
+                degraded: 0,
                 pending: 0,
                 unknown: 0,
                 pause: 0,
@@ -820,6 +826,8 @@ export default {
                         result.pending++;
                     } else if (beat.status === MAINTENANCE) {
                         result.maintenance++;
+                    } else if (beat.status === DEGRADED) {
+                        result.degraded++;
                     } else {
                         result.unknown++;
                     }

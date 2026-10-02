@@ -40,7 +40,7 @@
 
 <script>
 import dayjs from "dayjs";
-import { DOWN, UP, PENDING, MAINTENANCE } from "../util.ts";
+import { DOWN, UP, PENDING, MAINTENANCE, DEGRADED } from "../util.ts";
 import Tooltip from "./Tooltip.vue";
 
 export default {
@@ -446,6 +446,7 @@ export default {
                 down: status === DOWN,
                 pending: status === PENDING,
                 maintenance: status === MAINTENANCE,
+                degraded: status === DEGRADED,
             };
         },
 
@@ -464,6 +465,8 @@ export default {
                     return `Pending at ${this.$root.datetime(beat.time)}`;
                 case MAINTENANCE:
                     return `Maintenance at ${this.$root.datetime(beat.time)}`;
+                case DEGRADED:
+                    return `Degraded at ${this.$root.datetime(beat.time)}`;
                 default:
                     return "No data";
             }
@@ -583,6 +586,7 @@ export default {
                 down: rootStyles.getPropertyValue("--bs-danger") || "#dc3545",
                 pending: rootStyles.getPropertyValue("--bs-warning") || "#ffc107",
                 maintenance: rootStyles.getPropertyValue("--maintenance") || "#1d4ed8",
+                degraded: rootStyles.getPropertyValue("--degraded") || "#facc15",
                 up: rootStyles.getPropertyValue("--bs-primary") || "#5cdd8b",
             };
 
@@ -669,6 +673,8 @@ export default {
                 return colors.pending;
             } else if (status === MAINTENANCE) {
                 return colors.maintenance;
+            } else if (status === DEGRADED) {
+                return colors.degraded;
             } else {
                 return colors.up;
             }

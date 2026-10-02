@@ -3,7 +3,7 @@
 </template>
 
 <script>
-import { DOWN, MAINTENANCE, PENDING, UP } from "../util.ts";
+import { DEGRADED, DOWN, MAINTENANCE, PENDING, UP } from "../util.ts";
 
 export default {
     props: {
@@ -60,6 +60,10 @@ export default {
 
             if (this.lastHeartBeat.status === PENDING) {
                 return "warning";
+            }
+
+            if (this.lastHeartBeat.status === DEGRADED) {
+                return "degraded";
             }
 
             return "secondary";
