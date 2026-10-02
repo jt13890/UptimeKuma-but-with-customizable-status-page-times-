@@ -3,6 +3,7 @@ const { log } = require("../../src/util");
 const Database = require("../database");
 const { Settings } = require("../settings");
 const dayjs = require("dayjs");
+const { settleAllDegraded } = require("./settle-degraded");
 
 const DEFAULT_KEEP_PERIOD = 365;
 
@@ -11,6 +12,7 @@ const DEFAULT_KEEP_PERIOD = 365;
  * @returns {Promise<void>} A promise that resolves when the data has been cleared.
  */
 const clearOldData = async () => {
+    await settleAllDegraded();
     await Database.clearHeartbeatData();
     let period = await Settings.get("keepDataPeriodDays");
 
