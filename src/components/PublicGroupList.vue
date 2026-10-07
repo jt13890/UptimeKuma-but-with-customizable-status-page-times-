@@ -70,16 +70,24 @@
                                                     data-testid="monitor-settings"
                                                     @click="$refs.monitorSettingDialog.show(group, monitor)"
                                                 />
-                                                <Status
-                                                    v-if="showOnlyLastHeartbeat"
-                                                    :status="statusOfLastHeartbeat(monitor.element.id)"
-                                                />
-                                                <Uptime
-                                                    v-else
-                                                    :monitor="monitor.element"
-                                                    :type="uptimeType"
-                                                    :pill="true"
-                                                />
+                                                <template v-if="isPillVisible(monitor.element)">
+                                                    <span
+                                                        :class="{
+                                                            'pill-hidden-preview': !(monitor.element.showPill ?? true),
+                                                        }"
+                                                    >
+                                                        <Status
+                                                            v-if="showsLastStatus(monitor.element)"
+                                                            :status="statusOfLastHeartbeat(monitor.element.id)"
+                                                        />
+                                                        <Uptime
+                                                            v-else
+                                                            :monitor="monitor.element"
+                                                            :type="uptimeType"
+                                                            :pill="true"
+                                                        />
+                                                    </span>
+                                                </template>
                                                 <a
                                                     v-if="showLink(monitor)"
                                                     :href="monitor.element.url"
@@ -207,6 +215,32 @@ export default {
         },
     },
     methods: {
+        /**
+         * Should this monitor's pill be rendered? In edit mode it is always
+         * rendered (dimmed when hidden) so it can still be seen while editing.
+         * @param {object} monitor Monitor from the group's monitorList
+         * @returns {boolean} Whether to render the pill
+         */
+        isPillVisible(monitor) {
+            return this.editMode || (monitor.showPill ?? true);
+        },
+
+        /**
+         * Should this monitor's pill show the last status (instead of the uptime percentage)?
+         * A per-monitor choice wins; "global" follows the status page's "Show Only Last Heartbeat" switch.
+         * @param {object} monitor Monitor from the group's monitorList
+         * @returns {boolean} True for last status, false for uptime percentage
+         */
+        showsLastStatus(monitor) {
+            if (monitor.pillMode === "status") {
+                return true;
+            }
+            if (monitor.pillMode === "uptime") {
+                return false;
+            }
+            return this.showOnlyLastHeartbeat;
+        },
+
         /**
          * Toggle collapsed state for a group
          * @param {object} group Group to toggle
@@ -356,6 +390,10 @@ export default {
 
 <style lang="scss" scoped>
 @import "../assets/vars";
+
+.pill-hidden-preview {
+    opacity: 0.35;
+}
 
 .extra-info {
     display: flex;

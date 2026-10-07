@@ -76,6 +76,15 @@ const rootCertificates = rootCertificatesFingerprints();
  */
 class Monitor extends BeanModel {
     /**
+     * Normalize the per-monitor pill mode stored on monitor_group
+     * @param {any} value Raw value
+     * @returns {string} One of "global", "status", "uptime"
+     */
+    static normalizePillMode(value) {
+        return ["global", "status", "uptime"].includes(value) ? value : "global";
+    }
+
+    /**
      * Return an object that ready to parse to JSON for public Only show
      * necessary data to public
      * @param {boolean} showTags Include tags in JSON
@@ -89,6 +98,9 @@ class Monitor extends BeanModel {
             name: this.name,
             sendUrl: this.sendUrl,
             type: this.type,
+            // Per-monitor pill options (columns come from monitor_group, see Group.getMonitorList)
+            pillMode: Monitor.normalizePillMode(this.pillMode),
+            showPill: this.showPill === undefined || this.showPill === null ? true : !!this.showPill,
         };
 
         if (this.sendUrl) {

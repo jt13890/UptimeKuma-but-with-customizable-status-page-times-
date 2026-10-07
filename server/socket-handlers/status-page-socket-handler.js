@@ -6,6 +6,7 @@ const ImageDataURI = require("../image-data-uri");
 const Database = require("../database");
 const apicache = require("../modules/apicache");
 const StatusPage = require("../model/status_page");
+const Monitor = require("../model/monitor");
 const { UptimeKumaServer } = require("../uptime-kuma-server");
 const { Settings } = require("../settings");
 
@@ -390,6 +391,9 @@ module.exports.statusPageSocketHandler = (socket) => {
                     if (monitor.url !== undefined) {
                         relationBean.custom_url = monitor.url;
                     }
+
+                    relationBean.pill_mode = Monitor.normalizePillMode(monitor.pillMode);
+                    relationBean.show_pill = monitor.showPill === undefined ? true : !!monitor.showPill;
 
                     await R.store(relationBean);
                 }
