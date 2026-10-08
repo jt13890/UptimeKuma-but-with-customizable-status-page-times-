@@ -43,6 +43,46 @@
                         </div>
                     </template>
 
+                    <!-- Pill options -->
+                    <div class="my-3 form-check">
+                        <input
+                            id="show-pill"
+                            v-model="monitor.showPill"
+                            class="form-check-input"
+                            type="checkbox"
+                            data-testid="show-pill"
+                            @change="
+                                setPillOption(monitor.group_index, monitor.monitor_index, 'showPill', monitor.showPill)
+                            "
+                        />
+                        <label class="form-check-label" for="show-pill">
+                            {{ $t("Show Pill") }}
+                        </label>
+                        <div class="form-text">
+                            {{ $t("showPillDescription") }}
+                        </div>
+                    </div>
+
+                    <div v-if="monitor.showPill" class="mb-3">
+                        <label for="pill-mode" class="form-label">{{ $t("Pill Content") }}</label>
+                        <select
+                            id="pill-mode"
+                            v-model="monitor.pillMode"
+                            class="form-select"
+                            data-testid="pill-mode"
+                            @change="
+                                setPillOption(monitor.group_index, monitor.monitor_index, 'pillMode', monitor.pillMode)
+                            "
+                        >
+                            <option value="global">{{ $t("pillModeGlobal") }}</option>
+                            <option value="status">{{ $t("pillModeStatus") }}</option>
+                            <option value="uptime">{{ $t("pillModeUptime") }}</option>
+                        </select>
+                        <div class="form-text">
+                            {{ $t("pillModeDescription") }}
+                        </div>
+                    </div>
+
                     <button
                         class="btn btn-primary btn-add-group me-2"
                         @click="$refs.badgeLinkGeneratorDialog.show(monitor.id, monitor.name)"
@@ -108,6 +148,8 @@ export default {
                 group_index: group.index,
                 isClickAble: this.showLink(monitor),
                 url: monitor.element.url,
+                pillMode: monitor.element.pillMode ?? "global",
+                showPill: monitor.element.showPill ?? true,
             };
 
             this.MonitorSettingDialog.show();
@@ -146,6 +188,18 @@ export default {
             return (
                 monitor.element.sendUrl && monitor.element.url && monitor.element.url !== "https://" && !this.editMode
             );
+        },
+
+        /**
+         * Set a per-monitor pill option on the status page group list
+         * @param {number} groupIndex Index of group monitor is member of
+         * @param {number} index Index of monitor within group
+         * @param {string} key Option name, "pillMode" or "showPill"
+         * @param {string|boolean} value New value
+         * @returns {void}
+         */
+        setPillOption(groupIndex, index, key, value) {
+            this.$root.publicGroupList[groupIndex].monitorList[index][key] = value;
         },
 
         /**
