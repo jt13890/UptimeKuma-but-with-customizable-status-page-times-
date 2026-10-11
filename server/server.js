@@ -144,6 +144,7 @@ const Database = require("./database");
 
 log.debug("server", "Importing Background Jobs");
 const { initBackgroundJobs, stopBackgroundJobs } = require("./jobs");
+const { HAManager } = require("./ha");
 const { loginRateLimiter, twoFaRateLimiter } = require("./rate-limiter");
 
 const { apiAuth } = require("./auth");
@@ -152,6 +153,39 @@ const passwordHash = require("./password-hash");
 
 const { Prometheus } = require("./prometheus");
 const { UptimeCalculator } = require("./uptime-calculator");
+
+/**
+ * Active/passive high availability (disabled unless UPTIME_KUMA_HA_ENABLED=1, see server/ha.js).
+ * Only the active node runs monitors, notifications and background jobs.
+ */
+const ha = (server.ha = new HAManager({
+    onPromote: async () => {
+        // A standby may have cached stale uptime/maintenance data, reload from the database
+        await UptimeCalculator.removeAll();
+        await server.reloadMaintenanceList();
+        await startMonitors();
+        await initBackgroundJobs();
+    },
+    onDemote: async () => {
+        stopBackgroundJobs();
+        for (let id in server.monitorList) {
+            try {
+                await server.monitorList[id].stop();
+            } catch (e) {
+                log.error("ha", e);
+            }
+        }
+        server.monitorList = {};
+        await UptimeCalculator.removeAll();
+        // Kick dashboard clients, so they reconnect to whichever node is active now
+        io.disconnectSockets(true);
+    },
+    onStandbySync: async () => {
+        // The active node writes the statistics/maintenance, keep what standby serves (status pages) fresh
+        await UptimeCalculator.removeAll();
+        await server.reloadMaintenanceList();
+    },
+}));
 
 const hostname = config.hostname;
 
@@ -386,6 +420,16 @@ let needSetup = false;
     });
 
     log.debug("server", "Adding socket handler");
+
+    // A standby node must not accept dashboard connections: everything done there (adding/pausing
+    // monitors, ...) would never reach the active node's in-memory state.
+    io.use((socket, next) => {
+        if (!ha.isLeader()) {
+            return next(new Error("This node is a standby (high availability). Use the active node."));
+        }
+        next();
+    });
+
     io.on("connection", async (socket) => {
         await sendInfo(socket, true);
 
@@ -1781,10 +1825,15 @@ let needSetup = false;
     server.httpServer.listen(port, hostname, async () => {
         printServerUrls("server", port, hostname, config.isSSL);
 
-        await startMonitors();
+        if (ha.isEnabled()) {
+            // Monitors and background jobs are started by ha.onPromote once this node wins the lease
+            await ha.start();
+        } else {
+            await startMonitors();
 
-        // Put this here. Start background jobs after the db and server is ready to prevent clear up during db migration.
-        await initBackgroundJobs();
+            // Put this here. Start background jobs after the db and server is ready to prevent clear up during db migration.
+            await initBackgroundJobs();
+        }
 
         checkVersion.startInterval();
     });
@@ -1994,6 +2043,9 @@ async function shutdownFunction(signal) {
         await monitor.stop();
     }
     await sleep(2000);
+
+    // Hand the lease over (after monitors stopped) so a standby takes over within seconds
+    await ha.stop();
     await Database.close();
 
     if (EmbeddedMariaDB.hasInstance()) {

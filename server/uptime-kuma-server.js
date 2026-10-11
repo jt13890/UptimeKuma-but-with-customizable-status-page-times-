@@ -328,6 +328,19 @@ class UptimeKumaServer {
     }
 
     /**
+     * Stop and reload all maintenance windows from the database
+     * (used by high availability, when this node takes over or follows the active node)
+     * @returns {Promise<void>}
+     */
+    async reloadMaintenanceList() {
+        for (let id in this.maintenanceList) {
+            this.maintenanceList[id].stop();
+        }
+        this.maintenanceList = {};
+        await this.loadMaintenanceList();
+    }
+
+    /**
      * Retrieve a specific maintenance
      * @param {number} maintenanceID ID of maintenance to retrieve
      * @returns {(object|null)} Maintenance if it exists
