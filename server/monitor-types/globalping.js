@@ -454,6 +454,11 @@ class GlobalpingMonitorType extends MonitorType {
             throw new Error(this.formatResponse(probe, `TLS certificate is not authorized: ${tlsInfo.error}`));
         }
 
+        if (monitor.haObserver) {
+            // High availability standby: certificate info/notifications are handled by the active node only
+            return;
+        }
+
         let tlsInfoBean = await R.findOne("monitor_tls_info", "monitor_id = ?", [monitor.id]);
 
         if (tlsInfoBean == null) {

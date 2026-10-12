@@ -1,7 +1,9 @@
 # Active/passive high availability
 
-Two (or more) Uptime Kuma nodes share **one MariaDB database**. Exactly one node is _active_ (runs monitors,
+Two (or more) Uptime Kuma nodes share **one MariaDB database**. Exactly one node is _active_ (records heartbeats,
 sends notifications, runs background jobs). The others are _standby_ and take over automatically.
+Standby nodes also run the same checks and report what they see, so that **one node failing to reach a service is
+never enough to call it down** (see "Up wins").
 Disabled by default: with `UPTIME_KUMA_HA_ENABLED` unset, behaviour is identical to stock Uptime Kuma.
 
 ## How it works
@@ -19,11 +21,29 @@ Disabled by default: with `UPTIME_KUMA_HA_ENABLED` unset, behaviour is identical
 
 | Feature                             | Active          | Standby                                      |
 | ----------------------------------- | --------------- | -------------------------------------------- |
-| Monitors, notifications, jobs       | yes             | no                                           |
+| Heartbeats, notifications, jobs     | yes             | no                                           |
+| Runs the checks                     | yes             | yes, but only reports the result (observer)  |
 | Dashboard (socket.io)               | yes             | refused (clients retry until it is active)   |
 | `/api/push/<token>`                 | yes             | HTTP 503                                     |
 | Public status pages, badges         | yes             | yes (data refreshed from the DB periodically)|
 | `/api/ha/health`                    | 200             | 503                                          |
+
+## Up wins
+
+Every node checks every monitor. The standby writes its result to `ha_observation` (one row per monitor and node);
+it creates no heartbeat, statistics, notification or certificate alert.
+
+When the **active** node's own check says DOWN (or PENDING while retrying), it asks whether any other node saw the
+monitor UP recently. If so, the result becomes UP and the message says
+`Up according to node <name> (this node: <local error>)`. DOWN is only recorded when no peer has a fresh UP.
+
+- A peer's UP counts for `1.5 x interval + 5s` (override with `UPTIME_KUMA_HA_OBSERVATION_MAX_AGE`). A dead or
+  partitioned peer's stale UP therefore expires on its own.
+- A peer reporting DOWN never overrules the active node's UP.
+- Cost: a real outage is reported up to about one check interval later, because the peer's last UP is still fresh
+  when the active node first sees DOWN.
+- Push and group monitors are not observed (a push is received by one node, a group is derived from its children).
+- Set `UPTIME_KUMA_HA_OBSERVE=0` to turn this off; standbys then run nothing.
 
 ## Configuration (environment variables)
 
@@ -33,6 +53,8 @@ Disabled by default: with `UPTIME_KUMA_HA_ENABLED` unset, behaviour is identical
 | `UPTIME_KUMA_HA_NODE_NAME`      | hostname | Name shown in logs (a random suffix is added)   |
 | `UPTIME_KUMA_HA_LEASE_TTL`      | `15`     | Lease lifetime in seconds                       |
 | `UPTIME_KUMA_HA_RENEW_INTERVAL` | `5`      | Campaign/renew interval; must satisfy TTL >= 2x |
+| `UPTIME_KUMA_HA_OBSERVE`        | on       | `0` / `false`: standbys do not run checks       |
+| `UPTIME_KUMA_HA_OBSERVATION_MAX_AGE` | 1.5 x interval + 5 | Seconds a peer's UP observation counts |
 
 ## Deployment checklist
 
@@ -41,10 +63,12 @@ Disabled by default: with `UPTIME_KUMA_HA_ENABLED` unset, behaviour is identical
    SQLite works only for testing two processes on the same host.
 2. Run the same Uptime Kuma version on every node. **Start the first node alone** on a new database (setup wizard,
    migrations), then start the others.
-3. Put a load balancer / reverse proxy in front and use `GET /api/ha/health` as the health check, so traffic only
+3. Put the nodes on **different network paths** if you want "up wins" to be useful: two nodes behind the same
+   uplink fail together. Targets receive the checks from every node, so their load doubles.
+4. Put a load balancer / reverse proxy in front and use `GET /api/ha/health` as the health check, so traffic only
    reaches the active node (200). Point push-monitor clients and your Prometheus scrape at that same address.
-4. `data/upload` (status page logos/assets) is **not** in the database. Share it between nodes (NFS etc.) or sync it.
-5. Cloudflare Tunnel / other per-node settings are not coordinated; configure them per node as needed.
+5. `data/upload` (status page logos/assets) is **not** in the database. Share it between nodes (NFS etc.) or sync it.
+6. Cloudflare Tunnel / other per-node settings are not coordinated; configure them per node as needed.
 
 Example HAProxy backend:
 

@@ -1,7 +1,7 @@
 const os = require("os");
 const crypto = require("crypto");
 const { R } = require("redbean-node");
-const { log } = require("../src/util");
+const { log, UP } = require("../src/util");
 const Database = require("./database");
 
 const EXPIRED = "1970-01-01 00:00:00";
@@ -54,6 +54,13 @@ class HAManager {
         this.renewIntervalSec = renewSec;
         // Leader stops itself after this long without a confirmed renewal. Always < ttl.
         this.fenceAfterMs = (ttlSec - renewSec) * 1000;
+
+        // Standby nodes also run the checks and report what they see ("up wins" on the active node)
+        this.observe =
+            options.observe ?? !["0", "false"].includes(String(process.env.UPTIME_KUMA_HA_OBSERVE ?? "1").toLowerCase());
+        // How old a peer's UP observation may be and still count. Default per monitor: 1.5 x interval + 5s.
+        const envMaxAge = parseInt(process.env.UPTIME_KUMA_HA_OBSERVATION_MAX_AGE);
+        this.observationMaxAgeSec = options.observationMaxAgeSec ?? (envMaxAge > 0 ? envMaxAge : null);
 
         this.onPromote = options.onPromote || (async () => {});
         this.onDemote = options.onDemote || (async () => {});
@@ -112,12 +119,94 @@ class HAManager {
             return {
                 now: "datetime('now')",
                 future: `datetime('now', '+${ttl} seconds')`,
+                ago: (sec) => `datetime('now', '-${Math.ceil(Number(sec))} seconds')`,
             };
         }
         return {
             now: "UTC_TIMESTAMP()",
             future: `DATE_ADD(UTC_TIMESTAMP(), INTERVAL ${ttl} SECOND)`,
+            ago: (sec) => `DATE_SUB(UTC_TIMESTAMP(), INTERVAL ${Math.ceil(Number(sec))} SECOND)`,
         };
+    }
+
+    /**
+     * Should this node run checks only to report them (standby with observation enabled)?
+     * @returns {boolean} True if it should observe
+     */
+    canObserve() {
+        return this.enabled && this.observe && !this.stopped && !this.isLeader();
+    }
+
+    /**
+     * Store what this node saw for a monitor (one row per monitor and node).
+     * @param {number} monitorId Monitor id
+     * @param {number} status Heartbeat status (UP, DOWN, PENDING)
+     * @param {string} msg Message of the check
+     * @param {number|null} ping Response time
+     * @returns {Promise<void>}
+     */
+    async recordObservation(monitorId, status, msg, ping) {
+        const { now } = this.sqlTime();
+        const values = [
+            monitorId,
+            this.nodeId,
+            status,
+            msg ? String(msg).substring(0, 500) : null,
+            Number.isFinite(Number(ping)) && ping !== null ? Math.round(Number(ping)) : null,
+        ];
+
+        if (Database.dbConfig.type === "sqlite") {
+            await R.exec(
+                `INSERT INTO ha_observation (monitor_id, node_id, status, msg, ping, observed_at)
+                 VALUES (?, ?, ?, ?, ?, ${now})
+                 ON CONFLICT (monitor_id, node_id) DO UPDATE SET
+                     status = excluded.status, msg = excluded.msg, ping = excluded.ping, observed_at = excluded.observed_at`,
+                values
+            );
+        } else {
+            await R.exec(
+                `INSERT INTO ha_observation (monitor_id, node_id, status, msg, ping, observed_at)
+                 VALUES (?, ?, ?, ?, ?, ${now})
+                 ON DUPLICATE KEY UPDATE
+                     status = VALUES(status), msg = VALUES(msg), ping = VALUES(ping), observed_at = VALUES(observed_at)`,
+                values
+            );
+        }
+    }
+
+    /**
+     * "Up wins": did another node recently see this monitor UP?
+     * Never throws; if the database cannot be asked the local result stands.
+     * @param {object} monitor Monitor bean
+     * @returns {Promise<{nodeName: string, ping: number|null}|null>} The peer that saw it UP, if any
+     */
+    async findPeerUp(monitor) {
+        if (!this.enabled || !this.observe) {
+            return null;
+        }
+        try {
+            const maxAge = this.observationMaxAgeSec ?? Math.ceil(Number(monitor.interval || 60) * 1.5 + 5);
+            const { ago } = this.sqlTime();
+            const row = await R.getRow(
+                `SELECT node_id, ping FROM ha_observation
+                 WHERE monitor_id = ? AND status = ? AND node_id <> ? AND observed_at >= ${ago(maxAge)}
+                 ORDER BY observed_at DESC LIMIT 1`,
+                [monitor.id, UP, this.nodeId]
+            );
+            return row ? { nodeName: String(row.node_id).split(":")[0], ping: row.ping } : null;
+        } catch (e) {
+            log.warn("ha", `Could not read peer observations: ${e.message}`);
+            return null;
+        }
+    }
+
+    /**
+     * Remove observations of nodes that are long gone (node ids change on every process start)
+     * @returns {Promise<void>}
+     */
+    async pruneObservations() {
+        const { ago } = this.sqlTime();
+        await R.exec(`DELETE FROM ha_observation WHERE observed_at < ${ago(86400)}`);
     }
 
     /**
@@ -190,7 +279,7 @@ class HAManager {
             if (this.leader && !this.transitioning && Date.now() - this.lastRenewOk > this.fenceAfterMs) {
                 this.demote("lease could not be renewed in time").catch((e) => log.error("ha", e));
             }
-        }, 1000);
+        }, 250); // fine grained: the fence must fire well before a standby can win (ttl - fence >= renew interval)
 
         await this.tick();
     }
@@ -212,11 +301,15 @@ class HAManager {
                 if (!this.leader) {
                     await this.promote();
                 }
+                this.leaderTicks = (this.leaderTicks || 0) + 1;
+                if (this.leaderTicks % 60 === 0) {
+                    this.pruneObservations().catch((e) => log.warn("ha", "Prune failed: " + e.message));
+                }
             } else if (this.leader) {
                 await this.demote("lease is held by another node");
             } else {
                 this.tickCount++;
-                if (this.standbySyncEvery > 0 && this.tickCount % this.standbySyncEvery === 0) {
+                if (this.standbySyncEvery > 0 && (this.tickCount === 1 || this.tickCount % this.standbySyncEvery === 0)) {
                     try {
                         await this.onStandbySync();
                     } catch (e) {

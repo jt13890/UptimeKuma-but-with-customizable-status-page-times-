@@ -87,7 +87,7 @@ class DnsMonitorType extends MonitorType {
                 break;
         }
 
-        if (monitor.dns_last_result !== dnsMessage && dnsMessage !== undefined) {
+        if (!monitor.haObserver && monitor.dns_last_result !== dnsMessage && dnsMessage !== undefined) {
             await R.exec("UPDATE `monitor` SET dns_last_result = ? WHERE id = ? ", [dnsMessage, monitor.id]);
         }
 
