@@ -19,14 +19,14 @@ Disabled by default: with `UPTIME_KUMA_HA_ENABLED` unset, behaviour is identical
 - Monitors resume from the last heartbeat stored in the database, so there is no burst of checks on takeover.
   (In-memory retry counters restart, as they do on any normal restart.)
 
-| Feature                             | Active          | Standby                                      |
-| ----------------------------------- | --------------- | -------------------------------------------- |
-| Heartbeats, notifications, jobs     | yes             | no                                           |
-| Runs the checks                     | yes             | yes, but only reports the result (observer)  |
-| Dashboard (socket.io)               | yes             | refused (clients retry until it is active)   |
-| `/api/push/<token>`                 | yes             | HTTP 503                                     |
-| Public status pages, badges         | yes             | yes (data refreshed from the DB periodically)|
-| `/api/ha/health`                    | 200             | 503                                          |
+| Feature                         | Active | Standby                                       |
+| ------------------------------- | ------ | --------------------------------------------- |
+| Heartbeats, notifications, jobs | yes    | no                                            |
+| Runs the checks                 | yes    | yes, but only reports the result (observer)   |
+| Dashboard (socket.io)           | yes    | refused (clients retry until it is active)    |
+| `/api/push/<token>`             | yes    | HTTP 503                                      |
+| Public status pages, badges     | yes    | yes (data refreshed from the DB periodically) |
+| `/api/ha/health`                | 200    | 503                                           |
 
 ## Up wins
 
@@ -47,14 +47,14 @@ monitor UP recently. If so, the result becomes UP and the message says
 
 ## Configuration (environment variables)
 
-| Variable                        | Default  | Meaning                                         |
-| ------------------------------- | -------- | ----------------------------------------------- |
-| `UPTIME_KUMA_HA_ENABLED`        | off      | `1` / `true` to enable                          |
-| `UPTIME_KUMA_HA_NODE_NAME`      | hostname | Name shown in logs (a random suffix is added)   |
-| `UPTIME_KUMA_HA_LEASE_TTL`      | `15`     | Lease lifetime in seconds                       |
-| `UPTIME_KUMA_HA_RENEW_INTERVAL` | `5`      | Campaign/renew interval; must satisfy TTL >= 2x |
-| `UPTIME_KUMA_HA_OBSERVE`        | on       | `0` / `false`: standbys do not run checks       |
-| `UPTIME_KUMA_HA_OBSERVATION_MAX_AGE` | 1.5 x interval + 5 | Seconds a peer's UP observation counts |
+| Variable                             | Default            | Meaning                                         |
+| ------------------------------------ | ------------------ | ----------------------------------------------- |
+| `UPTIME_KUMA_HA_ENABLED`             | off                | `1` / `true` to enable                          |
+| `UPTIME_KUMA_HA_NODE_NAME`           | hostname           | Name shown in logs (a random suffix is added)   |
+| `UPTIME_KUMA_HA_LEASE_TTL`           | `15`               | Lease lifetime in seconds                       |
+| `UPTIME_KUMA_HA_RENEW_INTERVAL`      | `5`                | Campaign/renew interval; must satisfy TTL >= 2x |
+| `UPTIME_KUMA_HA_OBSERVE`             | on                 | `0` / `false`: standbys do not run checks       |
+| `UPTIME_KUMA_HA_OBSERVATION_MAX_AGE` | 1.5 x interval + 5 | Seconds a peer's UP observation counts          |
 
 ## Deployment checklist
 

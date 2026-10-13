@@ -24,17 +24,18 @@ const EXPIRED = "1970-01-01 00:00:00";
 class HAManager {
     /**
      * @param {object} options Options
-     * @param {boolean} [options.enabled] Enable HA
-     * @param {string} [options.name] Human readable node name (default: hostname)
-     * @param {number} [options.ttlSec] Lease time to live in seconds
-     * @param {number} [options.renewIntervalSec] How often to renew / campaign in seconds
-     * @param {Function} [options.onPromote] Called when this node becomes active
-     * @param {Function} [options.onDemote] Called when this node stops being active
-     * @param {Function} [options.onStandbySync] Called periodically while standby
-     * @param {number} [options.standbySyncEvery] Call onStandbySync every N ticks
+     * @param {boolean} options.enabled Enable HA
+     * @param {string} options.name Human readable node name (default: hostname)
+     * @param {number} options.ttlSec Lease time to live in seconds
+     * @param {number} options.renewIntervalSec How often to renew / campaign in seconds
+     * @param {Function} options.onPromote Called when this node becomes active
+     * @param {Function} options.onDemote Called when this node stops being active
+     * @param {Function} options.onStandbySync Called periodically while standby
+     * @param {number} options.standbySyncEvery Call onStandbySync every N ticks
      */
     constructor(options = {}) {
-        this.enabled = options.enabled ?? ["1", "true"].includes(String(process.env.UPTIME_KUMA_HA_ENABLED).toLowerCase());
+        this.enabled =
+            options.enabled ?? ["1", "true"].includes(String(process.env.UPTIME_KUMA_HA_ENABLED).toLowerCase());
 
         const name = options.name || process.env.UPTIME_KUMA_HA_NODE_NAME || os.hostname();
         // The random suffix makes two processes with the same name distinct, so a misconfiguration
@@ -45,7 +46,10 @@ class HAManager {
         let renewSec = parseInt(options.renewIntervalSec ?? process.env.UPTIME_KUMA_HA_RENEW_INTERVAL ?? 5);
 
         if (!Number.isInteger(ttlSec) || !Number.isInteger(renewSec) || renewSec < 1 || ttlSec < renewSec * 2) {
-            log.warn("ha", "Invalid lease settings (need integers, ttl >= 2 * renew interval). Using ttl=15s, renew=5s.");
+            log.warn(
+                "ha",
+                "Invalid lease settings (need integers, ttl >= 2 * renew interval). Using ttl=15s, renew=5s."
+            );
             ttlSec = 15;
             renewSec = 5;
         }
@@ -57,7 +61,8 @@ class HAManager {
 
         // Standby nodes also run the checks and report what they see ("up wins" on the active node)
         this.observe =
-            options.observe ?? !["0", "false"].includes(String(process.env.UPTIME_KUMA_HA_OBSERVE ?? "1").toLowerCase());
+            options.observe ??
+            !["0", "false"].includes(String(process.env.UPTIME_KUMA_HA_OBSERVE ?? "1").toLowerCase());
         // How old a peer's UP observation may be and still count. Default per monitor: 1.5 x interval + 5s.
         const envMaxAge = parseInt(process.env.UPTIME_KUMA_HA_OBSERVATION_MAX_AGE);
         this.observationMaxAgeSec = options.observationMaxAgeSec ?? (envMaxAge > 0 ? envMaxAge : null);
@@ -272,7 +277,10 @@ class HAManager {
                 "HA is enabled with SQLite. This only works for nodes on the SAME host sharing one data directory. Use MariaDB for real failover."
             );
         }
-        log.info("ha", `HA enabled. Node: ${this.nodeId}, lease ttl: ${this.ttlSec}s, renew: ${this.renewIntervalSec}s`);
+        log.info(
+            "ha",
+            `HA enabled. Node: ${this.nodeId}, lease ttl: ${this.ttlSec}s, renew: ${this.renewIntervalSec}s`
+        );
 
         // Independent of the (possibly hung) database call: stop the active node as soon as its lease may be in doubt
         this.watchdog = setInterval(() => {
@@ -309,7 +317,10 @@ class HAManager {
                 await this.demote("lease is held by another node");
             } else {
                 this.tickCount++;
-                if (this.standbySyncEvery > 0 && (this.tickCount === 1 || this.tickCount % this.standbySyncEvery === 0)) {
+                if (
+                    this.standbySyncEvery > 0 &&
+                    (this.tickCount === 1 || this.tickCount % this.standbySyncEvery === 0)
+                ) {
                     try {
                         await this.onStandbySync();
                     } catch (e) {
