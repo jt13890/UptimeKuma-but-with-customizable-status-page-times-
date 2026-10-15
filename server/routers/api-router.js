@@ -44,8 +44,26 @@ router.get("/api/entry-page", async (request, response) => {
     response.json(result);
 });
 
+/**
+ * High availability health check for load balancers / reverse proxies.
+ * 200 on the active node (or when HA is disabled), 503 on a standby node.
+ */
+router.get("/api/ha/health", (request, response) => {
+    const status = server.ha ? server.ha.getStatus() : { enabled: false, role: "standalone", epoch: 0 };
+    response.status(status.role === "standby" ? 503 : 200).json(status);
+});
+
 router.all("/api/push/:pushToken", async (request, response) => {
     try {
+        if (server.ha && !server.ha.isLeader()) {
+            // Only the active node may evaluate push heartbeats (statistics + notifications live in its memory)
+            response.status(503).json({
+                ok: false,
+                msg: "This node is a standby. Send push heartbeats to the active node.",
+            });
+            return;
+        }
+
         let pushToken = request.params.pushToken;
         let msg = request.query.msg || "OK";
         let ping = parseFloat(request.query.ping) || null;

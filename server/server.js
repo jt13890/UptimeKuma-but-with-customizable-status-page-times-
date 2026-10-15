@@ -144,6 +144,7 @@ const Database = require("./database");
 
 log.debug("server", "Importing Background Jobs");
 const { initBackgroundJobs, stopBackgroundJobs } = require("./jobs");
+const { HAManager } = require("./ha");
 const { loginRateLimiter, twoFaRateLimiter } = require("./rate-limiter");
 
 const { apiAuth } = require("./auth");
@@ -152,6 +153,123 @@ const passwordHash = require("./password-hash");
 
 const { Prometheus } = require("./prometheus");
 const { UptimeCalculator } = require("./uptime-calculator");
+
+/**
+ * Active/passive high availability (disabled unless UPTIME_KUMA_HA_ENABLED=1, see server/ha.js).
+ * Only the active node runs monitors, notifications and background jobs.
+ */
+const ha = (server.ha = new HAManager({
+    onPromote: async () => {
+        // This node runs the real monitors now, the observers must not run next to them
+        await observerSync;
+        await stopObservers();
+
+        // A standby may have cached stale uptime/maintenance data, reload from the database
+        await UptimeCalculator.removeAll();
+        await server.reloadMaintenanceList();
+        await startMonitors();
+        await initBackgroundJobs();
+    },
+    onDemote: async () => {
+        stopBackgroundJobs();
+        for (let id in server.monitorList) {
+            try {
+                await server.monitorList[id].stop();
+            } catch (e) {
+                log.error("ha", e);
+            }
+        }
+        server.monitorList = {};
+        await UptimeCalculator.removeAll();
+        // Kick dashboard clients, so they reconnect to whichever node is active now
+        io.disconnectSockets(true);
+        startObserverSync();
+    },
+    onStandbySync: async () => {
+        // The active node writes the statistics/maintenance, keep what standby serves (status pages) fresh
+        await UptimeCalculator.removeAll();
+        await server.reloadMaintenanceList();
+        startObserverSync();
+    },
+}));
+
+/**
+ * High availability: monitors a standby node runs only to report what it sees (monitor id -> {signature, monitor}).
+ * They never write heartbeats or send notifications, see Monitor.haObserver.
+ */
+const observers = new Map();
+let observerSync = Promise.resolve();
+let observerSyncRunning = false;
+
+/**
+ * Bring the observers in line with the monitors in the database, in the background
+ * (staggered starts can take minutes, that must never delay the lease loop).
+ * @returns {void}
+ */
+function startObserverSync() {
+    if (observerSyncRunning || !ha.canObserve()) {
+        return;
+    }
+    observerSyncRunning = true;
+    observerSync = syncObservers()
+        .catch((e) => log.error("ha", "Observer sync failed: " + e.message))
+        .finally(() => {
+            observerSyncRunning = false;
+        });
+}
+
+/**
+ * Start/stop/restart observers so they match the active monitors (push and group monitors cannot be observed)
+ * @returns {Promise<void>}
+ */
+async function syncObservers() {
+    const rows = await R.getAll("SELECT * FROM monitor WHERE active = 1 AND type NOT IN ('push', 'group')");
+    const wanted = new Map(rows.map((row) => [row.id, JSON.stringify(row)]));
+
+    for (const [id, observer] of observers) {
+        if (wanted.get(id) !== observer.signature) {
+            await observer.monitor.stop();
+            observers.delete(id);
+        }
+    }
+
+    for (const [id, signature] of wanted) {
+        if (observers.has(id)) {
+            continue;
+        }
+        if (!ha.canObserve()) {
+            return; // promoted in the meantime
+        }
+        const monitor = await R.findOne("monitor", " id = ? ", [id]);
+        if (!monitor) {
+            continue;
+        }
+        monitor.haObserver = true;
+        observers.set(id, { signature, monitor });
+        try {
+            await monitor.start(io);
+        } catch (e) {
+            log.error("ha", e);
+        }
+        // Spread the first checks out, like startMonitors() does
+        await sleep(getRandomInt(300, 1000));
+    }
+}
+
+/**
+ * Stop all observers
+ * @returns {Promise<void>}
+ */
+async function stopObservers() {
+    for (const [, observer] of observers) {
+        try {
+            await observer.monitor.stop();
+        } catch (e) {
+            log.error("ha", e);
+        }
+    }
+    observers.clear();
+}
 
 const hostname = config.hostname;
 
@@ -386,6 +504,16 @@ let needSetup = false;
     });
 
     log.debug("server", "Adding socket handler");
+
+    // A standby node must not accept dashboard connections: everything done there (adding/pausing
+    // monitors, ...) would never reach the active node's in-memory state.
+    io.use((socket, next) => {
+        if (!ha.isLeader()) {
+            return next(new Error("This node is a standby (high availability). Use the active node."));
+        }
+        next();
+    });
+
     io.on("connection", async (socket) => {
         await sendInfo(socket, true);
 
@@ -1781,10 +1909,15 @@ let needSetup = false;
     server.httpServer.listen(port, hostname, async () => {
         printServerUrls("server", port, hostname, config.isSSL);
 
-        await startMonitors();
+        if (ha.isEnabled()) {
+            // Monitors and background jobs are started by ha.onPromote once this node wins the lease
+            await ha.start();
+        } else {
+            await startMonitors();
 
-        // Put this here. Start background jobs after the db and server is ready to prevent clear up during db migration.
-        await initBackgroundJobs();
+            // Put this here. Start background jobs after the db and server is ready to prevent clear up during db migration.
+            await initBackgroundJobs();
+        }
 
         checkVersion.startInterval();
     });
@@ -1994,6 +2127,10 @@ async function shutdownFunction(signal) {
         await monitor.stop();
     }
     await sleep(2000);
+
+    // Hand the lease over (after monitors stopped) so a standby takes over within seconds
+    await ha.stop();
+    await stopObservers();
     await Database.close();
 
     if (EmbeddedMariaDB.hasInstance()) {

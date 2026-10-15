@@ -261,7 +261,11 @@ class Maintenance extends BeanModel {
 
                     // Set last start date to current time
                     this.last_start_date = current.utc().format(SQL_DATETIME_FORMAT);
-                    await R.store(this);
+
+                    // High availability: a standby holds a possibly stale copy, it must not write it back
+                    if (UptimeKumaServer.getInstance().ha?.isLeader() ?? true) {
+                        await R.store(this);
+                    }
                 };
 
                 // Create Cron

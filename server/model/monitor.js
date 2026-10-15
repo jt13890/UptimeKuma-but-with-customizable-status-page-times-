@@ -440,7 +440,9 @@ class Monitor extends BeanModel {
         this.rootCertificates = rootCertificates;
 
         try {
-            this.prometheus = new Prometheus(this, await this.getTags());
+            if (!this.haObserver) {
+                this.prometheus = new Prometheus(this, await this.getTags());
+            }
         } catch (e) {
             log.error("prometheus", "Please submit an issue to our GitHub repo. Prometheus update error: ", e.message);
         }
@@ -973,6 +975,43 @@ class Monitor extends BeanModel {
                     } else {
                         // Continue counting retries during DOWN
                         retries++;
+                    }
+                }
+            }
+
+            if (this.haObserver) {
+                // High availability standby: only report what this node sees. No heartbeat, statistics,
+                // notification or socket event is produced here, the active node decides.
+                if (bean.status !== MAINTENANCE) {
+                    try {
+                        await UptimeKumaServer.getInstance().ha.recordObservation(
+                            this.id,
+                            bean.status,
+                            bean.msg,
+                            bean.ping
+                        );
+                    } catch (e) {
+                        log.warn("monitor", `[${this.name}] Could not record HA observation: ${e.message}`);
+                    }
+                }
+
+                if (!this.isStop) {
+                    const remainingMs = Math.max(1, beatInterval * 1000 - dayjs().diff(dayjs.utc(bean.time)));
+                    this.heartbeatInterval = setTimeout(safeBeat, remainingMs);
+                }
+                return;
+            }
+
+            // High availability, "up wins": one node failing to reach the service does not mean the service is down.
+            // If a peer node recently saw it UP, this node's DOWN/PENDING result is overruled.
+            if (bean.status === DOWN || bean.status === PENDING) {
+                const peer = await UptimeKumaServer.getInstance().ha?.findPeerUp(this);
+                if (peer) {
+                    bean.msg = `Up according to node ${peer.nodeName} (this node: ${bean.msg})`;
+                    bean.status = UP;
+                    retries = 0;
+                    if (bean.ping === undefined || bean.ping === null) {
+                        bean.ping = peer.ping;
                     }
                 }
             }
@@ -2154,6 +2193,10 @@ class Monitor extends BeanModel {
      * @returns {Promise<void>}
      */
     async handleTlsInfo(tlsInfo) {
+        if (this.haObserver) {
+            // High availability standby: certificate info/notifications are handled by the active node only
+            return;
+        }
         await this.updateTlsInfo(tlsInfo);
         this.prometheus?.update(null, tlsInfo, null);
 
