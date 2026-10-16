@@ -282,6 +282,8 @@
     "templateServiceName": "service name",
     "templateHostnameOrURL": "hostname or URL",
     "templateStatus": "status",
+    "webhookNotifyOnDegradedTitle": "Notify when a monitor becomes degraded",
+    "webhookNotifyOnDegradedDesc": "Also send this webhook when a monitor changes to Degraded, and when it recovers from Degraded to Up. The payload's heartbeat.status is 4 for Degraded. Other notification types are not affected.",
     "webhookAdditionalHeadersTitle": "Additional Headers",
     "webhookAdditionalHeadersDesc": "Sets additional headers sent with the webhook. Each header should be defined as a JSON key/value.",
     "webhookBodyPresetOption": "Preset - {0}",

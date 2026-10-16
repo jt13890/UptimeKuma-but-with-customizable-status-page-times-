@@ -61,6 +61,21 @@
 
     <div class="mb-3">
         <div class="form-check form-switch">
+            <input
+                id="webhook-notify-on-degraded"
+                v-model="$parent.notification.webhookNotifyOnDegraded"
+                class="form-check-input"
+                type="checkbox"
+            />
+            <label class="form-check-label" for="webhook-notify-on-degraded">
+                {{ $t("webhookNotifyOnDegradedTitle") }}
+            </label>
+        </div>
+        <div class="form-text">{{ $t("webhookNotifyOnDegradedDesc") }}</div>
+    </div>
+
+    <div class="mb-3">
+        <div class="form-check form-switch">
             <input v-model="showAdditionalHeadersField" class="form-check-input" type="checkbox" />
             <label class="form-check-label">{{ $t("webhookAdditionalHeadersTitle") }}</label>
         </div>

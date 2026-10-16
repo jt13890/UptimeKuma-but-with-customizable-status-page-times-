@@ -129,7 +129,7 @@ router.all("/api/push/:pushToken", async (request, response) => {
             bean.downCount = 0;
 
             log.debug("monitor", `[${monitor.name}] sendNotification`);
-            await Monitor.sendNotification(isFirstBeat, monitor, bean);
+            await Monitor.sendNotification(isFirstBeat, monitor, bean, previousHeartbeat?.status);
         } else {
             if (bean.status === DOWN && monitor.resendInterval > 0) {
                 ++bean.downCount;
