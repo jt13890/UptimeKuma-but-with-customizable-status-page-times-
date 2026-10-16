@@ -1035,7 +1035,7 @@ class Monitor extends BeanModel {
 
                 if (Monitor.isImportantForNotification(isFirstBeat, previousBeat?.status, bean.status)) {
                     log.debug("monitor", `[${this.name}] sendNotification`);
-                    await Monitor.sendNotification(isFirstBeat, this, bean);
+                    await Monitor.sendNotification(isFirstBeat, this, bean, previousBeat?.status);
                 } else {
                     log.debug(
                         "monitor",
@@ -1552,11 +1552,13 @@ class Monitor extends BeanModel {
         // * MAINTENANCE -> DOWN = important
         // DOWN -> MAINTENANCE = not important
         // UP -> MAINTENANCE = not important
-        // ANY -> DEGRADED = not important
+        // * ANY -> DEGRADED = important (only delivered to webhooks with "notify on degraded" enabled, see sendNotification)
         // * DEGRADED -> DOWN = important
-        // DEGRADED -> UP = not important
+        // * DEGRADED -> UP = important (only delivered to webhooks with "notify on degraded" enabled, see sendNotification)
         return (
             isFirstBeat ||
+            (previousBeatStatus !== DEGRADED && currentBeatStatus === DEGRADED) ||
+            (previousBeatStatus === DEGRADED && currentBeatStatus === UP) ||
             (previousBeatStatus === DEGRADED && currentBeatStatus === DOWN) ||
             (previousBeatStatus === MAINTENANCE && currentBeatStatus === DOWN) ||
             (previousBeatStatus === UP && currentBeatStatus === DOWN) ||
@@ -1570,15 +1572,36 @@ class Monitor extends BeanModel {
      * @param {boolean} isFirstBeat Is this beat the first of this monitor?
      * @param {Monitor} monitor The monitor to send a notification about
      * @param {import("./heartbeat")} bean Status information about monitor
+     * @param {number|undefined} previousBeatStatus Status of the previous beat (used for DEGRADED -> UP recovery)
      * @returns {Promise<void>}
      */
-    static async sendNotification(isFirstBeat, monitor, bean) {
+    static async sendNotification(isFirstBeat, monitor, bean, previousBeatStatus = undefined) {
         if (!isFirstBeat || bean.status === DOWN) {
-            const notificationList = await Monitor.getNotificationList(monitor);
+            let notificationList = await Monitor.getNotificationList(monitor);
+
+            // DEGRADED and DEGRADED -> UP transitions are only sent to webhook notifications that opted in.
+            // All other providers keep their existing behaviour.
+            const isDegradedTransition =
+                bean.status === DEGRADED || (bean.status === UP && previousBeatStatus === DEGRADED);
+            if (isDegradedTransition) {
+                notificationList = notificationList.filter((n) => {
+                    try {
+                        const config = JSON.parse(n.config);
+                        return config.type === "webhook" && !!config.webhookNotifyOnDegraded;
+                    } catch (e) {
+                        return false;
+                    }
+                });
+                if (notificationList.length === 0) {
+                    return;
+                }
+            }
 
             let text;
             if (bean.status === UP) {
                 text = "✅ Up";
+            } else if (bean.status === DEGRADED) {
+                text = "🟠 Degraded";
             } else {
                 text = "🔴 Down";
             }
