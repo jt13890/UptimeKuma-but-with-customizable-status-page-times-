@@ -48,15 +48,15 @@ describe("Degraded status", () => {
         assert.strictEqual(new UptimeCalculator().flatStatus(DEGRADED), UP);
     });
 
-    test("changes to and from degraded are important, but only degraded -> down notifies", () => {
+    test("changes to and from degraded are important, and notify (sendNotification limits degraded ones to opted-in webhook / Rocket.Chat)", () => {
         for (const other of [UP, DOWN, PENDING, MAINTENANCE]) {
             assert.strictEqual(Monitor.isImportantBeat(false, other, DEGRADED), true);
             assert.strictEqual(Monitor.isImportantBeat(false, DEGRADED, other), true);
-            assert.strictEqual(Monitor.isImportantForNotification(false, other, DEGRADED), false);
+            assert.strictEqual(Monitor.isImportantForNotification(false, other, DEGRADED), true);
         }
         assert.strictEqual(Monitor.isImportantBeat(false, DEGRADED, DEGRADED), false);
         assert.strictEqual(Monitor.isImportantForNotification(false, DEGRADED, DOWN), true);
-        assert.strictEqual(Monitor.isImportantForNotification(false, DEGRADED, UP), false);
+        assert.strictEqual(Monitor.isImportantForNotification(false, DEGRADED, UP), true);
     });
 
     test("parseDegradedDependsOn() accepts a list of IDs only", () => {

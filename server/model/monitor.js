@@ -28,6 +28,21 @@ const {
     RESPONSE_BODY_LENGTH_DEFAULT,
     RESPONSE_BODY_LENGTH_MAX,
 } = require("../../src/util");
+
+/**
+ * Notification types that can opt in to DEGRADED (and DEGRADED -> UP) notifications, and the config flag that does it.
+ * All other providers keep their existing behaviour.
+ */
+const DEGRADED_NOTIFICATION_FLAGS = {
+    webhook: "webhookNotifyOnDegraded",
+    "rocket.chat": "rocketNotifyOnDegraded",
+};
+
+/**
+ * Message prefix of a DOWN beat caused by "every monitor this one depends on is down".
+ * Used to tell that kind of DOWN apart from a real outage, see Monitor.getOthersDownState().
+ */
+const DOWN_BY_OTHERS_PREFIX = "Down: every monitor this one depends on is down";
 const {
     ping,
     checkCertificate,
@@ -1018,12 +1033,7 @@ class Monitor extends BeanModel {
 
             bean.retries = retries;
 
-            if (bean.status !== MAINTENANCE && (await this.isAnyOtherDown())) {
-                bean.msg = bean.msg
-                    ? `Degraded: another monitor is not responding (${bean.msg})`
-                    : "Degraded: another monitor is not responding";
-                bean.status = DEGRADED;
-            }
+            await this.applyDegradedByOthers(bean);
 
             log.debug("monitor", `[${this.name}] Check isImportant`);
             let isImportant = Monitor.isImportantBeat(isFirstBeat, previousBeat?.status, bean.status);
@@ -1462,18 +1472,22 @@ class Monitor extends BeanModel {
     }
 
     /**
-     * Should this monitor be degraded because another monitor is not responding?
-     * Only active monitors (not groups) are taken into account, and one of them being DOWN is enough.
-     * @returns {Promise<boolean>} True if the degraded option is on and at least one other monitor is down
+     * Look at the latest beat of the other monitors this one depends on for the degraded option.
+     * Only active monitors (not groups) are taken into account.
+     * A DOWN beat only counts if it is a real outage of that monitor. A DOWN caused by
+     * "every monitor it depends on is down" (see applyDegradedByOthers) is ignored, otherwise monitors
+     * that watch each other would keep each other down after the real outage is over.
+     * @returns {Promise<{anyDown: boolean, allDown: boolean}>} anyDown: at least one watched monitor is down,
+     * allDown: there is at least one watched monitor and all of them are down. Both false if the option is off.
      */
-    async isAnyOtherDown() {
+    async getOthersDownState() {
         if (!this.degradedByOthers) {
-            return false;
+            return { anyDown: false, allDown: false };
         }
 
         const dependsOn = JSON.parse(this.degradedDependsOn || "[]").filter((id) => id !== this.id);
         let sql = `
-            SELECT heartbeat.status FROM monitor
+            SELECT heartbeat.status, heartbeat.msg FROM monitor
             LEFT JOIN heartbeat ON heartbeat.id = (
                 SELECT id FROM heartbeat WHERE monitor_id = monitor.id ORDER BY time DESC LIMIT 1
             )
@@ -1487,7 +1501,49 @@ class Monitor extends BeanModel {
         }
 
         const others = await R.getAll(sql, params);
-        return others.some((other) => other.status === DOWN);
+        const isRealDown = (other) =>
+            other.status === DOWN && !String(other.msg || "").startsWith(DOWN_BY_OTHERS_PREFIX);
+
+        return {
+            anyDown: others.some(isRealDown),
+            allDown: others.length > 0 && others.every(isRealDown),
+        };
+    }
+
+    /**
+     * Should this monitor be degraded because another monitor is not responding?
+     * Only active monitors (not groups) are taken into account, and one of them being DOWN is enough.
+     * @returns {Promise<boolean>} True if the degraded option is on and at least one other monitor is down
+     */
+    async isAnyOtherDown() {
+        return (await this.getOthersDownState()).anyDown;
+    }
+
+    /**
+     * Apply the "degraded when other monitors are down" option to a heartbeat (changes bean.status and bean.msg).
+     * - Under maintenance: unchanged.
+     * - This monitor's own check is DOWN (its URL is offline): stays DOWN, a real outage is never shown as degraded.
+     * - Every monitor it depends on is down: DOWN.
+     * - At least one, but not all, of them is down: DEGRADED.
+     * @param {import("./heartbeat")} bean The heartbeat that is about to be stored
+     * @returns {Promise<void>}
+     */
+    async applyDegradedByOthers(bean) {
+        if (bean.status === MAINTENANCE || bean.status === DOWN) {
+            return;
+        }
+
+        const { anyDown, allDown } = await this.getOthersDownState();
+
+        if (allDown) {
+            bean.msg = bean.msg ? `${DOWN_BY_OTHERS_PREFIX} (${bean.msg})` : DOWN_BY_OTHERS_PREFIX;
+            bean.status = DOWN;
+        } else if (anyDown) {
+            bean.msg = bean.msg
+                ? `Degraded: another monitor is not responding (${bean.msg})`
+                : "Degraded: another monitor is not responding";
+            bean.status = DEGRADED;
+        }
     }
 
     /**
@@ -1552,9 +1608,9 @@ class Monitor extends BeanModel {
         // * MAINTENANCE -> DOWN = important
         // DOWN -> MAINTENANCE = not important
         // UP -> MAINTENANCE = not important
-        // * ANY -> DEGRADED = important (only delivered to webhooks with "notify on degraded" enabled, see sendNotification)
+        // * ANY -> DEGRADED = important (only delivered to webhook / Rocket.Chat notifications with "notify on degraded" enabled, see sendNotification)
         // * DEGRADED -> DOWN = important
-        // * DEGRADED -> UP = important (only delivered to webhooks with "notify on degraded" enabled, see sendNotification)
+        // * DEGRADED -> UP = important (only delivered to webhook / Rocket.Chat notifications with "notify on degraded" enabled, see sendNotification)
         return (
             isFirstBeat ||
             (previousBeatStatus !== DEGRADED && currentBeatStatus === DEGRADED) ||
@@ -1579,7 +1635,7 @@ class Monitor extends BeanModel {
         if (!isFirstBeat || bean.status === DOWN) {
             let notificationList = await Monitor.getNotificationList(monitor);
 
-            // DEGRADED and DEGRADED -> UP transitions are only sent to webhook notifications that opted in.
+            // DEGRADED and DEGRADED -> UP transitions are only sent to webhook and Rocket.Chat notifications that opted in.
             // All other providers keep their existing behaviour.
             const isDegradedTransition =
                 bean.status === DEGRADED || (bean.status === UP && previousBeatStatus === DEGRADED);
@@ -1587,7 +1643,8 @@ class Monitor extends BeanModel {
                 notificationList = notificationList.filter((n) => {
                     try {
                         const config = JSON.parse(n.config);
-                        return config.type === "webhook" && !!config.webhookNotifyOnDegraded;
+                        const flag = DEGRADED_NOTIFICATION_FLAGS[config.type];
+                        return !!flag && !!config[flag];
                     } catch (e) {
                         return false;
                     }
