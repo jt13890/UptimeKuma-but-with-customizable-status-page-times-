@@ -107,6 +107,47 @@ describe("Degraded status (database)", () => {
         assert.strictEqual(await (await load(a)).isAnyOtherDown(), false, "option is off");
     });
 
+    test("applyDegradedByOthers() goes DOWN when the monitor's own check is down or all watched monitors are down", async () => {
+        const a = await addMonitor("apply-a", { degradedByOthers: true });
+        const b = await addMonitor("apply-b");
+        const c = await addMonitor("apply-c");
+        const load = async (id) => await R.findOne("monitor", " id = ? ", [id]);
+        const apply = async (status, msg = "") => {
+            const beat = { status, msg };
+            await (await load(a)).applyDegradedByOthers(beat);
+            return beat;
+        };
+
+        // Watch only b and c, so the monitors of the other tests don't matter
+        const bean = await load(a);
+        bean.degradedDependsOn = JSON.stringify([b, c]);
+        await R.store(bean);
+
+        await addBeat(b, UP);
+        await addBeat(c, UP);
+        assert.strictEqual((await apply(UP)).status, UP, "nothing is down");
+
+        await addBeat(c, DOWN);
+        assert.strictEqual((await apply(UP)).status, DEGRADED, "some watched monitors are down");
+        assert.strictEqual((await apply(DOWN)).status, DOWN, "own check is down, never degraded");
+        assert.strictEqual((await apply(MAINTENANCE)).status, MAINTENANCE, "maintenance is unchanged");
+
+        await addBeat(b, DOWN);
+        const allDown = await apply(UP, "200 OK");
+        assert.strictEqual(allDown.status, DOWN, "all watched monitors are down");
+        assert.ok(allDown.msg.includes("200 OK"), "the original message is kept");
+
+        // A DOWN that only comes from "all watched monitors are down" is not a real outage
+        const beatID = await addBeat(b, DOWN);
+        await R.exec("UPDATE heartbeat SET msg = ? WHERE id = ?", [allDown.msg, beatID]);
+        assert.strictEqual((await apply(UP)).status, DEGRADED, "only c is really down");
+
+        // The option is off
+        bean.degradedByOthers = false;
+        await R.store(bean);
+        assert.strictEqual((await apply(UP)).status, UP, "option is off");
+    });
+
     test("degraded heartbeats older than 24 hours are stored as up", async () => {
         const id = await addMonitor("settle");
         const old = await addBeat(id, DEGRADED, 30, 1);

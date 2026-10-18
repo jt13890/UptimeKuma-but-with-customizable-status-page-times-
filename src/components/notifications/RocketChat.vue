@@ -38,4 +38,19 @@
             </i18n-t>
         </div>
     </div>
+
+    <div class="mb-3">
+        <div class="form-check form-switch">
+            <input
+                id="rocket-notify-on-degraded"
+                v-model="$parent.notification.rocketNotifyOnDegraded"
+                class="form-check-input"
+                type="checkbox"
+            />
+            <label class="form-check-label" for="rocket-notify-on-degraded">
+                {{ $t("rocketNotifyOnDegradedTitle") }}
+            </label>
+        </div>
+        <div class="form-text">{{ $t("rocketNotifyOnDegradedDesc") }}</div>
+    </div>
 </template>

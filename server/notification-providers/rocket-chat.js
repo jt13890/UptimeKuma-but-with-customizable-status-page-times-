@@ -1,7 +1,7 @@
 const NotificationProvider = require("./notification-provider");
 const axios = require("axios");
 const Slack = require("./slack");
-const { getMonitorRelativeURL, DOWN } = require("../../src/util");
+const { getMonitorRelativeURL, DOWN, DEGRADED } = require("../../src/util");
 const { Settings } = require("../settings");
 
 class RocketChat extends NotificationProvider {
@@ -42,6 +42,8 @@ class RocketChat extends NotificationProvider {
             // Color
             if (heartbeatJSON.status === DOWN) {
                 data.attachments[0].color = "#ff0000";
+            } else if (heartbeatJSON.status === DEGRADED) {
+                data.attachments[0].color = "#ffa500";
             } else {
                 data.attachments[0].color = "#32cd32";
             }

@@ -105,12 +105,7 @@ router.all("/api/push/:pushToken", async (request, response) => {
         } else {
             determineStatus(statusFromParam, previousHeartbeat, monitor.maxretries, monitor.isUpsideDown(), bean);
 
-            if (await monitor.isAnyOtherDown()) {
-                bean.status = DEGRADED;
-                bean.msg = bean.msg
-                    ? `Degraded: another monitor is not responding (${bean.msg})`
-                    : "Degraded: another monitor is not responding";
-            }
+            await monitor.applyDegradedByOthers(bean);
         }
 
         // Calculate uptime

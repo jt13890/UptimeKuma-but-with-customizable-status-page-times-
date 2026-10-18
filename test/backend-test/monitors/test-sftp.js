@@ -17,8 +17,8 @@ const { STATUS_CODE } = sshUtils.sftp;
 // ---------------------------------------------------------------------------
 // Host / client key material — generated once for the entire test suite
 // ---------------------------------------------------------------------------
-const HOST_KEY = sshUtils.generateKeyPairSync("ed25519").private;
-const clientKeyPair = sshUtils.generateKeyPairSync("ed25519");
+const HOST_KEY = sshUtils.generateKeyPairSync("rsa", { bits: 2048 }).private;
+const clientKeyPair = sshUtils.generateKeyPairSync("rsa", { bits: 2048 });
 /** PEM-encoded private key string to pass as monitor.sshPrivateKey */
 const CLIENT_PRIVATE_KEY = clientKeyPair.private.toString("utf8");
 const parsedClientPubKey = sshUtils.parseKey(clientKeyPair.public);
@@ -294,7 +294,7 @@ describe("SFTP Monitor", () => {
 // a real key exchange. These tests cover what that one structurally cannot —
 // a genuine handshake, algorithm negotiation and real `exists()` semantics.
 //
-// They also use an RSA key, whereas the in-process suite uses ed25519.
+// Both suites use RSA keys.
 //
 // Skipped on CI outside linux/x64 (the standard guard used by every other
 // container-backed test in this repo) because Docker is unavailable there.
