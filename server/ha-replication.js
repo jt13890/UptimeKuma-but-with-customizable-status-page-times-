@@ -211,7 +211,8 @@ function sqliteOps(livePath) {
             const db = new sqlite3.Database(file, mode, (err) => (err ? reject(err) : resolve(db)));
         });
     const run = (db, sql) => new Promise((resolve, reject) => db.run(sql, (err) => (err ? reject(err) : resolve())));
-    const all = (db, sql) => new Promise((resolve, reject) => db.all(sql, (err, rows) => (err ? reject(err) : resolve(rows))));
+    const all = (db, sql) =>
+        new Promise((resolve, reject) => db.all(sql, (err, rows) => (err ? reject(err) : resolve(rows))));
     const close = (db) => new Promise((resolve) => db.close(() => resolve()));
 
     return {
@@ -231,7 +232,10 @@ function sqliteOps(livePath) {
             const db = await open(file, sqlite3.OPEN_READONLY);
             try {
                 const rows = await all(db, "PRAGMA quick_check");
-                const tables = await all(db, "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('monitor', 'setting', 'user')");
+                const tables = await all(
+                    db,
+                    "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('monitor', 'setting', 'user')"
+                );
                 return rows.length === 1 && rows[0].quick_check === "ok" && tables.length === 3;
             } finally {
                 await close(db);

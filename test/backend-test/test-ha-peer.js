@@ -23,7 +23,10 @@ const DOWN = 0;
 describe("HA config", () => {
     test("normalize validates values", () => {
         assert.throws(() => haConfig.normalize({ enabled: true, peers: [], secret: "x".repeat(20) }), /peer URL/);
-        assert.throws(() => haConfig.normalize({ enabled: true, peers: ["https://a.example"], secret: "short" }), /16 characters/);
+        assert.throws(
+            () => haConfig.normalize({ enabled: true, peers: ["https://a.example"], secret: "short" }),
+            /16 characters/
+        );
         assert.throws(() => haConfig.normalize({ failoverAfterSec: 1 }), /failoverAfterSec/);
         assert.throws(() => haConfig.normalize({ peers: ["ftp://a.example"] }), /http/);
         assert.throws(() => haConfig.normalize({ connectivityTargets: ["nonsense"] }), /host:port/);
@@ -234,7 +237,11 @@ describe("HA peers (two nodes, real HTTP, real SQLite files)", { skip: !Database
      */
     function beat(node, monitorId, status) {
         const db = new DatabaseSync(node.live);
-        db.prepare("INSERT INTO heartbeat (monitor_id, status, note) VALUES (?, ?, ?)").run(monitorId, status, node.name);
+        db.prepare("INSERT INTO heartbeat (monitor_id, status, note) VALUES (?, ?, ?)").run(
+            monitorId,
+            status,
+            node.name
+        );
         db.close();
     }
 
@@ -265,7 +272,14 @@ describe("HA peers (two nodes, real HTTP, real SQLite files)", { skip: !Database
      * @returns {Promise<{a: object, b: object}>} Nodes
      */
     async function cluster(extra = {}) {
-        const timing = { failoverAfterSec: 1, staggerSec: 1, failbackAfterSec: 0, isolationGraceSec: 0, snapshotIntervalSec: 5, ...extra };
+        const timing = {
+            failoverAfterSec: 1,
+            staggerSec: 1,
+            failbackAfterSec: 0,
+            isolationGraceSec: 0,
+            snapshotIntervalSec: 5,
+            ...extra,
+        };
         const a = await createNode("A", { preferred: true, bootstrap: true, config: timing });
         const b = await createNode("B", { config: timing });
         // The checks use real intervals below the allowed minimum: skip validation by assigning directly
@@ -508,7 +522,12 @@ describe("HA peers (two nodes, real HTTP, real SQLite files)", { skip: !Database
 
     test("only a non-preferred active node hands over, and only on request of an authenticated peer", async () => {
         const { a, b } = await cluster();
-        const unauth = await dispatchPeerRequest(a.ha, { method: "POST", name: "handover", authorization: "Bearer nope", body: {} });
+        const unauth = await dispatchPeerRequest(a.ha, {
+            method: "POST",
+            name: "handover",
+            authorization: "Bearer nope",
+            body: {},
+        });
         assert.strictEqual(unauth.status, 401);
         const refused = await dispatchPeerRequest(a.ha, {
             method: "POST",
