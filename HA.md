@@ -1,5 +1,7 @@
 # Active/passive high availability
 
+> **Using SQLite?** Two nodes with separate databases are supported too, see [HA-SQLITE.md](HA-SQLITE.md). This document describes the variant with a shared MariaDB.
+
 Two (or more) Uptime Kuma nodes share **one MariaDB database**. Exactly one node is _active_ (records heartbeats,
 sends notifications, runs background jobs). The others are _standby_ and take over automatically.
 Standby nodes also run the same checks and report what they see, so that **one node failing to reach a service is

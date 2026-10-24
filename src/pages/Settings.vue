@@ -118,6 +118,9 @@ export default {
                 proxies: {
                     title: this.$t("Proxies"),
                 },
+                "high-availability": {
+                    title: this.$t("High Availability"),
+                },
                 about: {
                     title: this.$t("About"),
                 },

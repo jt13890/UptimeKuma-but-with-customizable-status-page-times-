@@ -72,6 +72,9 @@ class HAManager {
         this.onStandbySync = options.onStandbySync || (async () => {});
         this.standbySyncEvery = options.standbySyncEvery ?? 12;
 
+        // True in PeerHAManager (ha-peer.js): every node has its own SQLite database and the nodes talk over HTTP
+        this.peerMode = false;
+
         this.leader = false;
         this.epoch = 0;
         this.lastRenewOk = 0;
@@ -271,7 +274,7 @@ class HAManager {
         }
         this.stopped = false;
 
-        if (Database.dbConfig.type === "sqlite") {
+        if (Database.dbConfig.type === "sqlite" && !this.peerMode) {
             log.warn(
                 "ha",
                 "HA is enabled with SQLite. This only works for nodes on the SAME host sharing one data directory. Use MariaDB for real failover."

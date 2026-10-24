@@ -30,6 +30,7 @@ import MonitorHistory from "./components/settings/MonitorHistory.vue";
 const Security = () => import("./components/settings/Security.vue");
 import Proxies from "./components/settings/Proxies.vue";
 import About from "./components/settings/About.vue";
+const HighAvailability = () => import("./components/settings/HighAvailability.vue");
 import RemoteBrowsers from "./components/settings/RemoteBrowsers.vue";
 
 const routes = [
@@ -130,6 +131,10 @@ const routes = [
                             {
                                 path: "proxies",
                                 component: Proxies,
+                            },
+                            {
+                                path: "high-availability",
+                                component: HighAvailability,
                             },
                             {
                                 path: "about",

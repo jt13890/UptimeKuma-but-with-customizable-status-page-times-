@@ -145,6 +145,9 @@ const Database = require("./database");
 log.debug("server", "Importing Background Jobs");
 const { initBackgroundJobs, stopBackgroundJobs } = require("./jobs");
 const { HAManager } = require("./ha");
+const { PeerHAManager } = require("./ha-peer");
+const haConfig = require("./ha-config");
+const { Replicator, sqliteOps } = require("./ha-replication");
 const { loginRateLimiter, twoFaRateLimiter } = require("./rate-limiter");
 
 const { apiAuth } = require("./auth");
@@ -158,7 +161,7 @@ const { UptimeCalculator } = require("./uptime-calculator");
  * Active/passive high availability (disabled unless UPTIME_KUMA_HA_ENABLED=1, see server/ha.js).
  * Only the active node runs monitors, notifications and background jobs.
  */
-const ha = (server.ha = new HAManager({
+const haHooks = {
     onPromote: async () => {
         // This node runs the real monitors now, the observers must not run next to them
         await observerSync;
@@ -186,12 +189,65 @@ const ha = (server.ha = new HAManager({
         startObserverSync();
     },
     onStandbySync: async () => {
+        if (ha.peerMode) {
+            // SQLite peers: every node has its own database, take over the data of the active node first
+            try {
+                const result = await ha.syncFromLeader();
+                if (result.applied) {
+                    // The database file was replaced: whatever was cached from the old one is stale
+                    Settings.cacheList = {};
+                    await StatusPage.loadDomainMappingList();
+
+    // SQLite peer high availability (configured in Settings -> High Availability, stored in data/ha.json)
+    try {
+        let peerConfig = haConfig.load(Database.dataDir);
+        if (!peerConfig && process.env.UPTIME_KUMA_HA_JOIN) {
+            // Second node: join an existing node with the token from its settings page
+            peerConfig = haConfig.save(
+                Database.dataDir,
+                haConfig.fromJoinToken(
+                    process.env.UPTIME_KUMA_HA_JOIN,
+                    process.env.UPTIME_KUMA_HA_NODE_NAME || require("os").hostname(),
+                    process.env.UPTIME_KUMA_HA_URL || ""
+                )
+            );
+            log.info("ha", "Joined an HA cluster from UPTIME_KUMA_HA_JOIN. This node will sync from the active node first.");
+        }
+        if (peerConfig?.enabled) {
+            if (Database.dbConfig.type !== "sqlite") {
+                throw new Error("SQLite peer HA is configured but this install uses " + Database.dbConfig.type);
+            }
+            ha = server.ha = new PeerHAManager({ ...haHooks, config: peerConfig, dataDir: Database.dataDir });
+            const ops = sqliteOps(Database.sqlitePath);
+            ha.attachReplicator(
+                new Replicator({
+                    dataDir: Database.dataDir,
+                    createSnapshot: ops.createSnapshot,
+                    quickCheck: ops.quickCheck,
+                    applyFile: (file) => Database.swapSqliteFile(file, peerConfig.keepBackups),
+                    snapshotIntervalSec: peerConfig.snapshotIntervalSec,
+                })
+            );
+        }
+    } catch (e) {
+        log.error("ha", "Could not set up high availability: " + e.message);
+        process.exit(1);
+    }
+                    server.entryPage = await Settings.get("entryPage");
+                }
+            } catch (e) {
+                log.warn("ha", "Sync from the active node failed: " + e.message);
+            }
+        }
+
         // The active node writes the statistics/maintenance, keep what standby serves (status pages) fresh
         await UptimeCalculator.removeAll();
         await server.reloadMaintenanceList();
         startObserverSync();
     },
-}));
+};
+// Replaced by a PeerHAManager once the data directory is known, when SQLite peer HA is configured (see HA-SQLITE.md)
+let ha = (server.ha = new HAManager(haHooks));
 
 /**
  * High availability: monitors a standby node runs only to report what it sees (monitor id -> {signature, monitor}).
@@ -327,6 +383,7 @@ const { resetChrome } = require("./monitor-types/real-browser-monitor-type");
 const { EmbeddedMariaDB } = require("./embedded-mariadb");
 const { SetupDatabase } = require("./setup-database");
 const { chartSocketHandler } = require("./socket-handlers/chart-socket-handler");
+const { haSocketHandler } = require("./socket-handlers/ha-socket-handler");
 
 app.use(express.json());
 
@@ -472,6 +529,10 @@ let needSetup = false;
     // With Basic Auth using the first user's username/password
     app.get("/metrics", apiAuth, prometheusAPIMetrics());
 
+    // High availability: only the active node exposes the dashboard (the guard does nothing unless SQLite peer HA runs)
+    const haRouter = require("./routers/ha-router");
+    app.use(haRouter.standbyGuard);
+
     app.use(
         "/",
         expressStaticGzip("dist", {
@@ -489,6 +550,7 @@ let needSetup = false;
     // API Router
     const apiRouter = require("./routers/api-router");
     app.use(apiRouter);
+    app.use(haRouter);
 
     // Status Page Router
     const statusPageRouter = require("./routers/status-page-router");
@@ -1878,6 +1940,7 @@ let needSetup = false;
         remoteBrowserSocketHandler(socket);
         generalSocketHandler(socket, server);
         chartSocketHandler(socket);
+        haSocketHandler(socket);
 
         log.debug("server", "added all socket handlers");
 

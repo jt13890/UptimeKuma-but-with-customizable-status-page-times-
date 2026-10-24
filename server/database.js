@@ -801,6 +801,40 @@ class Database {
     }
 
     /**
+     * High availability (SQLite peers, see HA-SQLITE.md): replace the live database with a verified snapshot
+     * of the other node. The old database is kept in <data dir>/ha/backups (the newest `keepBackups` copies).
+     * Same approach as the e2e snapshot restore: close, replace the file, connect again.
+     * @param {string} newFile Verified SQLite file on the same file system as the data directory
+     * @param {number} keepBackups How many old databases to keep
+     * @returns {Promise<void>}
+     */
+    static async swapSqliteFile(newFile, keepBackups = 3) {
+        if (Database.dbConfig.type !== "sqlite") {
+            throw new Error("Only SQLite databases can be swapped");
+        }
+        const { Replicator } = require("./ha-replication");
+        const backupDir = path.join(Database.dataDir, "ha", "backups");
+        fs.mkdirSync(backupDir, { recursive: true });
+
+        await Database.close(); // checkpoints the WAL first
+
+        try {
+            if (fs.existsSync(Database.sqlitePath)) {
+                const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+                fs.renameSync(Database.sqlitePath, path.join(backupDir, `kuma-${stamp}.db`));
+            }
+            for (const suffix of ["-wal", "-shm"]) {
+                fs.rmSync(Database.sqlitePath + suffix, { force: true });
+            }
+            fs.renameSync(newFile, Database.sqlitePath);
+        } finally {
+            // Whatever happened to the files, the server needs a database connection again
+            await Database.connect(false, true, true);
+        }
+        Replicator.pruneBackups(backupDir, keepBackups);
+    }
+
+    /**
      * Get the size of the database (SQLite only)
      * @returns {Promise<number>} Size of database
      */
