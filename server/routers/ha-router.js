@@ -74,7 +74,10 @@ function standbyGuard(req, res, next) {
  * @returns {string} HTML-escaped text
  */
 function escapeHtml(text) {
-    return String(text).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+    return String(text).replace(
+        /[&<>"']/g,
+        (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]
+    );
 }
 
 module.exports = router;

@@ -42,7 +42,11 @@
                                     <div class="form-text">{{ peer.url }}</div>
                                 </td>
                                 <td>
-                                    <span v-if="peer.reachable" class="badge" :class="peer.role === 'active' ? 'bg-primary' : 'bg-secondary'">
+                                    <span
+                                        v-if="peer.reachable"
+                                        class="badge"
+                                        :class="peer.role === 'active' ? 'bg-primary' : 'bg-secondary'"
+                                    >
                                         {{ peer.role === "active" ? $t("haActive") : $t("haStandby") }}
                                     </span>
                                     <span v-else class="badge bg-danger">{{ $t("haUnreachable") }}</span>
@@ -76,7 +80,14 @@
 
                 <div class="my-3">
                     <label for="ha-name" class="form-label">{{ $t("haNodeName") }}</label>
-                    <input id="ha-name" v-model="form.nodeName" type="text" class="form-control" maxlength="60" :placeholder="$t('haNodeNamePlaceholder')" />
+                    <input
+                        id="ha-name"
+                        v-model="form.nodeName"
+                        type="text"
+                        class="form-control"
+                        maxlength="60"
+                        :placeholder="$t('haNodeNamePlaceholder')"
+                    />
                 </div>
 
                 <div class="form-check form-switch my-3">
@@ -87,13 +98,25 @@
 
                 <div class="my-3">
                     <label for="ha-self" class="form-label">{{ $t("haSelfUrl") }}</label>
-                    <input id="ha-self" v-model="form.selfUrl" type="url" class="form-control" placeholder="https://kuma-home.example.com" />
+                    <input
+                        id="ha-self"
+                        v-model="form.selfUrl"
+                        type="url"
+                        class="form-control"
+                        placeholder="https://kuma-home.example.com"
+                    />
                     <div class="form-text">{{ $t("haSelfUrlHelp") }}</div>
                 </div>
 
                 <div class="my-3">
                     <label for="ha-peers" class="form-label">{{ $t("haPeerUrls") }}</label>
-                    <textarea id="ha-peers" v-model="peersText" class="form-control" rows="2" placeholder="https://kuma-vps.example.com"></textarea>
+                    <textarea
+                        id="ha-peers"
+                        v-model="peersText"
+                        class="form-control"
+                        rows="2"
+                        placeholder="https://kuma-vps.example.com"
+                    ></textarea>
                     <div class="form-text">{{ $t("haPeerUrlsHelp") }}</div>
                     <div v-if="insecurePeer" class="text-warning small mt-1">{{ $t("haInsecureWarning") }}</div>
                 </div>
@@ -109,7 +132,14 @@
                             autocomplete="new-password"
                             :placeholder="form.hasSecret ? $t('haSecretKeep') : ''"
                         />
-                        <button class="btn btn-outline-secondary" type="button" @click="form.generateSecret = true; form.secret = ''">
+                        <button
+                            class="btn btn-outline-secondary"
+                            type="button"
+                            @click="
+                                form.generateSecret = true;
+                                form.secret = '';
+                            "
+                        >
                             {{ $t("haGenerateSecret") }}
                         </button>
                     </div>
@@ -122,22 +152,50 @@
                 <div class="row">
                     <div class="col-md-6 my-3">
                         <label for="ha-failover" class="form-label">{{ $t("haFailoverAfter") }}</label>
-                        <input id="ha-failover" v-model.number="form.failoverAfterSec" type="number" min="5" max="3600" class="form-control" />
+                        <input
+                            id="ha-failover"
+                            v-model.number="form.failoverAfterSec"
+                            type="number"
+                            min="5"
+                            max="3600"
+                            class="form-control"
+                        />
                         <div class="form-text">{{ $t("haFailoverAfterHelp") }}</div>
                     </div>
                     <div class="col-md-6 my-3">
                         <label for="ha-stagger" class="form-label">{{ $t("haStagger") }}</label>
-                        <input id="ha-stagger" v-model.number="form.staggerSec" type="number" min="0" max="600" class="form-control" />
+                        <input
+                            id="ha-stagger"
+                            v-model.number="form.staggerSec"
+                            type="number"
+                            min="0"
+                            max="600"
+                            class="form-control"
+                        />
                         <div class="form-text">{{ $t("haStaggerHelp") }}</div>
                     </div>
                     <div class="col-md-6 my-3">
                         <label for="ha-snapshot" class="form-label">{{ $t("haSnapshotInterval") }}</label>
-                        <input id="ha-snapshot" v-model.number="form.snapshotIntervalSec" type="number" min="5" max="3600" class="form-control" />
+                        <input
+                            id="ha-snapshot"
+                            v-model.number="form.snapshotIntervalSec"
+                            type="number"
+                            min="5"
+                            max="3600"
+                            class="form-control"
+                        />
                         <div class="form-text">{{ $t("haSnapshotIntervalHelp") }}</div>
                     </div>
                     <div class="col-md-6 my-3">
                         <label for="ha-isolation" class="form-label">{{ $t("haIsolationGrace") }}</label>
-                        <input id="ha-isolation" v-model.number="form.isolationGraceSec" type="number" min="0" max="3600" class="form-control" />
+                        <input
+                            id="ha-isolation"
+                            v-model.number="form.isolationGraceSec"
+                            type="number"
+                            min="0"
+                            max="3600"
+                            class="form-control"
+                        />
                         <div class="form-text">{{ $t("haIsolationGraceHelp") }}</div>
                     </div>
                 </div>
@@ -150,7 +208,14 @@
 
                 <div v-if="form.autoFailback" class="my-3">
                     <label for="ha-failback-after" class="form-label">{{ $t("haFailbackAfter") }}</label>
-                    <input id="ha-failback-after" v-model.number="form.failbackAfterSec" type="number" min="0" max="86400" class="form-control" />
+                    <input
+                        id="ha-failback-after"
+                        v-model.number="form.failbackAfterSec"
+                        type="number"
+                        min="0"
+                        max="86400"
+                        class="form-control"
+                    />
                 </div>
 
                 <div class="form-check form-switch my-3">
@@ -161,7 +226,13 @@
 
                 <div class="my-3">
                     <label for="ha-targets" class="form-label">{{ $t("haConnectivityTargets") }}</label>
-                    <textarea id="ha-targets" v-model="targetsText" class="form-control" rows="2" placeholder="1.1.1.1:443"></textarea>
+                    <textarea
+                        id="ha-targets"
+                        v-model="targetsText"
+                        class="form-control"
+                        rows="2"
+                        placeholder="1.1.1.1:443"
+                    ></textarea>
                     <div class="form-text">{{ $t("haConnectivityTargetsHelp") }}</div>
                 </div>
 
@@ -181,9 +252,17 @@
                     {{ $t("haCreateToken") }}
                 </button>
                 <div v-if="token">
-                    <textarea class="form-control font-monospace" rows="4" readonly :value="token" @focus="$event.target.select()"></textarea>
+                    <textarea
+                        class="form-control font-monospace"
+                        rows="4"
+                        readonly
+                        :value="token"
+                        @focus="$event.target.select()"
+                    ></textarea>
                     <div class="form-text my-2">{{ $t("haTokenWarning") }}</div>
-                    <pre class="bg-dark text-light p-3 rounded"><code>docker run -d --restart=always -p 3001:3001 -v uptime-kuma:/app/data \
+                    <pre
+                        class="bg-dark text-light p-3 rounded"
+                    ><code>docker run -d --restart=always -p 3001:3001 -v uptime-kuma:/app/data \
   -e UPTIME_KUMA_HA_JOIN="{{ token }}" \
   -e UPTIME_KUMA_HA_NODE_NAME="second-node" \
   -e UPTIME_KUMA_HA_URL="https://this-second-node.example.com" \
@@ -219,7 +298,9 @@ export default {
                     return false;
                 }
                 // Private networks and VPN addresses are fine, anything else is readable on the way
-                return !/^http:\/\/(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.|[^/.]+(:\d+)?(\/|$))/.test(url);
+                return !/^http:\/\/(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.|[^/.]+(:\d+)?(\/|$))/.test(
+                    url
+                );
             });
         },
     },
@@ -268,7 +349,11 @@ export default {
                     .filter((line) => line !== "");
 
             this.saving = true;
-            const payload = { ...this.form, peers: lines(this.peersText), connectivityTargets: lines(this.targetsText) };
+            const payload = {
+                ...this.form,
+                peers: lines(this.peersText),
+                connectivityTargets: lines(this.targetsText),
+            };
             delete payload.hasSecret;
 
             this.$root.getSocket().emit("saveHAConfig", payload, (res) => {
