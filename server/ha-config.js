@@ -107,7 +107,9 @@ function normalize(input = {}) {
     cfg.bootstrap = !!cfg.bootstrap;
     cfg.autoFailback = !!cfg.autoFailback;
     cfg.observe = !!cfg.observe;
-    cfg.nodeName = String(cfg.nodeName || "").trim().substring(0, 60);
+    cfg.nodeName = String(cfg.nodeName || "")
+        .trim()
+        .substring(0, 60);
     cfg.secret = String(cfg.secret || "");
     cfg.selfUrl = cfg.selfUrl ? normalizeUrl(cfg.selfUrl) : "";
     cfg.peers = [...new Set((cfg.peers || []).filter((p) => String(p).trim() !== "").map(normalizeUrl))];
@@ -179,7 +181,7 @@ function save(dataDir, cfg) {
  */
 function makeJoinToken(cfg) {
     if (!cfg.selfUrl) {
-        throw new Error("Set \"This node's URL\" first, the second node needs it to find this one");
+        throw new Error('Set "This node\'s URL" first, the second node needs it to find this one');
     }
     const shared = {};
     for (const key of SHARED_KEYS) {
