@@ -211,7 +211,10 @@ class PeerHAManager extends HAManager {
     activePeers() {
         return [...this.peerStates.values()]
             .filter((p) => p.reachable && p.role === "active")
-            .sort((a, b) => b.epoch - a.epoch || Number(b.preferred) - Number(a.preferred) || (a.nodeId < b.nodeId ? -1 : 1));
+            .sort(
+                (a, b) =>
+                    b.epoch - a.epoch || Number(b.preferred) - Number(a.preferred) || (a.nodeId < b.nodeId ? -1 : 1)
+            );
     }
 
     /**
@@ -295,7 +298,8 @@ class PeerHAManager extends HAManager {
         if (!this.internetOk) {
             this.blindSince ??= now;
             if (now - this.blindSince >= this.config.isolationGraceSec * 1000) {
-                this.demoteReason = "this node lost connectivity, standing down so it does not record false DOWN results";
+                this.demoteReason =
+                    "this node lost connectivity, standing down so it does not record false DOWN results";
                 this.noLeaderSince = null;
                 this.blindSince = null;
                 return false;
@@ -355,7 +359,9 @@ class PeerHAManager extends HAManager {
 
         const waitMs = (cfg.failoverAfterSec + (cfg.preferred ? 0 : cfg.staggerSec)) * 1000;
         if (this.forceLead || now - this.noLeaderSince >= waitMs) {
-            const why = this.forceLead ? "the active node shut down" : `no active node for ${Math.round((now - this.noLeaderSince) / 1000)}s`;
+            const why = this.forceLead
+                ? "the active node shut down"
+                : `no active node for ${Math.round((now - this.noLeaderSince) / 1000)}s`;
             this.forceLead = false;
             return this.becomeActive(why);
         }
@@ -425,7 +431,9 @@ class PeerHAManager extends HAManager {
         }
         const peer = this.peerStates.get(url);
         if (peer?.versionMismatch) {
-            throw new Error(`The other node runs version ${peer.version}, this node ${this.version}. Update both to the same version.`);
+            throw new Error(
+                `The other node runs version ${peer.version}, this node ${this.version}. Update both to the same version.`
+            );
         }
         const result = await this.replicator.pull(url, this.config.secret, {
             have: final ? null : this.state.appliedId,
@@ -542,6 +550,7 @@ class PeerHAManager extends HAManager {
      * A standby reports what it saw ("up wins")
      * @param {object} body {monitorId, status, ping, nodeId}
      * @returns {void}
+     * @throws {Error} With .status 400 when the observation is malformed
      */
     handleObserve(body) {
         const monitorId = Number(body?.monitorId);
@@ -595,9 +604,13 @@ class PeerHAManager extends HAManager {
         if (!leader) {
             return;
         }
-        this.peerRequest(leader.url, "POST", "/api/ha/observe", { monitorId, status, ping, nodeId: this.nodeId }, 2000).catch(
-            (e) => log.debug("ha", `Could not send observation: ${e.message}`)
-        );
+        this.peerRequest(
+            leader.url,
+            "POST",
+            "/api/ha/observe",
+            { monitorId, status, ping, nodeId: this.nodeId },
+            2000
+        ).catch((e) => log.debug("ha", `Could not send observation: ${e.message}`));
     }
 
     /**
@@ -800,4 +813,47 @@ async function dispatchPeerRequest(ha, req) {
     }
 }
 
-module.exports = { PeerHAManager, dispatchPeerRequest };
+// Node-to-node API: must stay reachable on a standby (the nodes authenticate with the shared secret).
+// /api/ha/health is answered by api-router.js (503 on a standby, with details), so it passes as well.
+const PEER_API = /^\/api\/ha\/(status|snapshot|observe|handover|leader-gone|config|health)$/;
+const PUBLIC_PATHS = /^\/(status|api|upload|metrics|assets|_e2e)(\/|$)/;
+
+/**
+ * Express middleware (first in the chain): what a standby node answers to everybody else.
+ *
+ * Default: HTTP 503 on EVERY path and method (also OPTIONS/HEAD and "/", the usual health checks of HAProxy, nginx,
+ * Traefik, ...) so a load balancer marks the node down without any special configuration. Only the node-to-node API
+ * stays reachable. With config.standbyStatusPages the standby keeps serving public pages and only refuses dashboard
+ * navigations (then a load balancer must check /api/ha/health).
+ * @param {Function} getHa Returns the HA manager of this node (it is replaced when HA is switched on at startup)
+ * @returns {Function} Express middleware
+ */
+function createStandbyGuard(getHa) {
+    return function standbyGuard(req, res, next) {
+        const ha = getHa();
+        if (!ha?.peerMode || ha.isLeader() || PEER_API.test(req.path)) {
+            return next();
+        }
+
+        const accept = req.headers?.accept || "";
+        if (ha.config.standbyStatusPages) {
+            const publicRequest = req.method !== "GET" || PUBLIC_PATHS.test(req.path) || req.path.includes(".");
+            if (publicRequest || !accept.includes("text/html")) {
+                return next();
+            }
+        }
+
+        res.status(503).set({ "Retry-After": "10", "X-HA-Role": "standby", "Cache-Control": "no-store" });
+        if (accept.includes("text/html")) {
+            // Deliberately without the address of the active node: this page can be seen by anybody
+            return res.send(
+                `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">` +
+                    `<title>Standby</title></head><body style="font-family:sans-serif;max-width:32rem;margin:4rem auto;padding:0 1rem">` +
+                    `<h2>This node is on standby</h2><p>Another node is currently running Uptime Kuma. Please try again in a moment.</p></body></html>`
+            );
+        }
+        return res.json({ ok: false, role: "standby", msg: "This node is on standby" });
+    };
+}
+
+module.exports = { PeerHAManager, dispatchPeerRequest, createStandbyGuard };

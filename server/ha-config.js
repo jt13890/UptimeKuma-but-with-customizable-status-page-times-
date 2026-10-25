@@ -38,6 +38,9 @@ const DEFAULTS = {
     failbackAfterSec: 30,
     // Standby nodes also run the checks and report what they see ("up wins")
     observe: true,
+    // false: a standby answers HTTP 503 on every path (except the node-to-node API), so a load balancer such as
+    // HAProxy marks it down whatever it checks. true: it keeps serving public status pages, only the dashboard is refused.
+    standbyStatusPages: false,
     // An active node without connectivity for this long stands down instead of recording false DOWNs
     isolationGraceSec: 20,
     // host:port list used to decide "do I have connectivity". Empty = never consider this node isolated.
@@ -55,6 +58,7 @@ const SHARED_KEYS = [
     "autoFailback",
     "failbackAfterSec",
     "observe",
+    "standbyStatusPages",
     "isolationGraceSec",
     "connectivityTargets",
 ];
@@ -107,7 +111,10 @@ function normalize(input = {}) {
     cfg.bootstrap = !!cfg.bootstrap;
     cfg.autoFailback = !!cfg.autoFailback;
     cfg.observe = !!cfg.observe;
-    cfg.nodeName = String(cfg.nodeName || "").trim().substring(0, 60);
+    cfg.standbyStatusPages = !!cfg.standbyStatusPages;
+    cfg.nodeName = String(cfg.nodeName || "")
+        .trim()
+        .substring(0, 60);
     cfg.secret = String(cfg.secret || "");
     cfg.selfUrl = cfg.selfUrl ? normalizeUrl(cfg.selfUrl) : "";
     cfg.peers = [...new Set((cfg.peers || []).filter((p) => String(p).trim() !== "").map(normalizeUrl))];
@@ -176,10 +183,11 @@ function save(dataDir, cfg) {
  * Join token: what a second node needs to find the first one. It contains the shared secret, treat it like a password.
  * @param {object} cfg Config of the node that creates the token
  * @returns {string} Token
+ * @throws {Error} This node has no URL yet, the second node needs it to find this one
  */
 function makeJoinToken(cfg) {
     if (!cfg.selfUrl) {
-        throw new Error("Set \"This node's URL\" first, the second node needs it to find this one");
+        throw new Error('Set "This node\'s URL" first, the second node needs it to find this one');
     }
     const shared = {};
     for (const key of SHARED_KEYS) {
@@ -202,6 +210,7 @@ function makeJoinToken(cfg) {
  * @param {string} nodeName Name of this node
  * @param {string} selfUrl URL of this node as seen by the other node (optional)
  * @returns {object} Config (enabled, not bootstrap: it must sync before it may become active)
+ * @throws {Error} The token is not valid
  */
 function fromJoinToken(token, nodeName, selfUrl = "") {
     let payload;

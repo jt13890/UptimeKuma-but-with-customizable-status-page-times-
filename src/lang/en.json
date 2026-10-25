@@ -1704,5 +1704,7 @@
     "haAddSecondNode": "Add the second node",
     "haAddSecondNodeHelp": "Create a token and start the second Uptime Kuma with it. The second node copies the data of this node first, then stands by.",
     "haCreateToken": "Create join token",
-    "haTokenWarning": "The token contains the shared secret. Treat it like a password."
+    "haTokenWarning": "The token contains the shared secret. Treat it like a password.",
+    "haStandbyStatusPages": "Standby also serves public status pages",
+    "haStandbyStatusPagesHelp": "Off (recommended behind a load balancer): the standby answers HTTP 503 on every address, so HAProxy, nginx or Traefik mark it as down. On: it keeps serving status pages, then the load balancer must check /api/ha/health."
 }
