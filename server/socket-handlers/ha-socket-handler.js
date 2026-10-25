@@ -52,7 +52,9 @@ module.exports.haSocketHandler = (socket) => {
         try {
             checkLogin(socket);
             if (Database.dbConfig.type !== "sqlite") {
-                throw new Error("This page is for SQLite installs. With MariaDB use the database based HA (see HA.md).");
+                throw new Error(
+                    "This page is for SQLite installs. With MariaDB use the database based HA (see HA.md)."
+                );
             }
 
             const previous = haConfig.load(Database.dataDir);
@@ -92,7 +94,13 @@ module.exports.haSocketHandler = (socket) => {
                 }
                 for (const url of stored.peers) {
                     try {
-                        await ha.peerRequest(url, "POST", "/api/ha/config", { shared, preferred: !stored.preferred }, 5000);
+                        await ha.peerRequest(
+                            url,
+                            "POST",
+                            "/api/ha/config",
+                            { shared, preferred: !stored.preferred },
+                            5000
+                        );
                         push.push({ url, ok: true });
                     } catch (e) {
                         push.push({ url, ok: false, msg: e.message });
