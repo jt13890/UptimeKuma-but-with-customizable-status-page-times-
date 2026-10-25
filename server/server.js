@@ -198,41 +198,50 @@ const haHooks = {
                     Settings.cacheList = {};
                     await StatusPage.loadDomainMappingList();
 
-    // SQLite peer high availability (configured in Settings -> High Availability, stored in data/ha.json)
-    try {
-        let peerConfig = haConfig.load(Database.dataDir);
-        if (!peerConfig && process.env.UPTIME_KUMA_HA_JOIN) {
-            // Second node: join an existing node with the token from its settings page
-            peerConfig = haConfig.save(
-                Database.dataDir,
-                haConfig.fromJoinToken(
-                    process.env.UPTIME_KUMA_HA_JOIN,
-                    process.env.UPTIME_KUMA_HA_NODE_NAME || require("os").hostname(),
-                    process.env.UPTIME_KUMA_HA_URL || ""
-                )
-            );
-            log.info("ha", "Joined an HA cluster from UPTIME_KUMA_HA_JOIN. This node will sync from the active node first.");
-        }
-        if (peerConfig?.enabled) {
-            if (Database.dbConfig.type !== "sqlite") {
-                throw new Error("SQLite peer HA is configured but this install uses " + Database.dbConfig.type);
-            }
-            ha = server.ha = new PeerHAManager({ ...haHooks, config: peerConfig, dataDir: Database.dataDir });
-            const ops = sqliteOps(Database.sqlitePath);
-            ha.attachReplicator(
-                new Replicator({
-                    dataDir: Database.dataDir,
-                    createSnapshot: ops.createSnapshot,
-                    quickCheck: ops.quickCheck,
-                    applyFile: (file) => Database.swapSqliteFile(file, peerConfig.keepBackups),
-                    snapshotIntervalSec: peerConfig.snapshotIntervalSec,
-                })
-            );
-        }
-    } catch (e) {
-        log.error("ha", "Could not set up high availability: " + e.message);
-        process.exit(1);
-    }
+                    // SQLite peer high availability (configured in Settings -> High Availability, stored in data/ha.json)
+                    try {
+                        let peerConfig = haConfig.load(Database.dataDir);
+                        if (!peerConfig && process.env.UPTIME_KUMA_HA_JOIN) {
+                            // Second node: join an existing node with the token from its settings page
+                            peerConfig = haConfig.save(
+                                Database.dataDir,
+                                haConfig.fromJoinToken(
+                                    process.env.UPTIME_KUMA_HA_JOIN,
+                                    process.env.UPTIME_KUMA_HA_NODE_NAME || require("os").hostname(),
+                                    process.env.UPTIME_KUMA_HA_URL || ""
+                                )
+                            );
+                            log.info(
+                                "ha",
+                                "Joined an HA cluster from UPTIME_KUMA_HA_JOIN. This node will sync from the active node first."
+                            );
+                        }
+                        if (peerConfig?.enabled) {
+                            if (Database.dbConfig.type !== "sqlite") {
+                                throw new Error(
+                                    "SQLite peer HA is configured but this install uses " + Database.dbConfig.type
+                                );
+                            }
+                            ha = server.ha = new PeerHAManager({
+                                ...haHooks,
+                                config: peerConfig,
+                                dataDir: Database.dataDir,
+                            });
+                            const ops = sqliteOps(Database.sqlitePath);
+                            ha.attachReplicator(
+                                new Replicator({
+                                    dataDir: Database.dataDir,
+                                    createSnapshot: ops.createSnapshot,
+                                    quickCheck: ops.quickCheck,
+                                    applyFile: (file) => Database.swapSqliteFile(file, peerConfig.keepBackups),
+                                    snapshotIntervalSec: peerConfig.snapshotIntervalSec,
+                                })
+                            );
+                        }
+                    } catch (e) {
+                        log.error("ha", "Could not set up high availability: " + e.message);
+                        process.exit(1);
+                    }
                     server.entryPage = await Settings.get("entryPage");
                 }
             } catch (e) {
