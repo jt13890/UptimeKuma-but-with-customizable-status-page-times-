@@ -23,7 +23,10 @@ const DOWN = 0;
 describe("HA config", () => {
     test("normalize validates values", () => {
         assert.throws(() => haConfig.normalize({ enabled: true, peers: [], secret: "x".repeat(20) }), /peer URL/);
-        assert.throws(() => haConfig.normalize({ enabled: true, peers: ["https://a.example"], secret: "short" }), /16 characters/);
+        assert.throws(
+            () => haConfig.normalize({ enabled: true, peers: ["https://a.example"], secret: "short" }),
+            /16 characters/
+        );
         assert.throws(() => haConfig.normalize({ failoverAfterSec: 1 }), /failoverAfterSec/);
         assert.throws(() => haConfig.normalize({ peers: ["ftp://a.example"] }), /http/);
         assert.throws(() => haConfig.normalize({ connectivityTargets: ["nonsense"] }), /host:port/);
@@ -60,11 +63,17 @@ describe("HA config", () => {
         const setup = source.indexOf("UPTIME_KUMA_HA_JOIN");
         const create = source.indexOf("new PeerHAManager(");
         const prometheus = source.indexOf('"Initializing Prometheus"');
-        assert.ok(ready > 0 && setup > ready && create > setup && prometheus > create, "HA setup must run right after the database is ready");
+        assert.ok(
+            ready > 0 && setup > ready && create > setup && prometheus > create,
+            "HA setup must run right after the database is ready"
+        );
         const hooksStart = source.indexOf("const haHooks = {");
         const hooksEnd = source.indexOf("let ha = (server.ha = new HAManager(haHooks));");
         assert.ok(hooksStart > 0 && hooksEnd > hooksStart);
-        assert.ok(!source.slice(hooksStart, hooksEnd).includes("new PeerHAManager("), "must not be nested in the hooks");
+        assert.ok(
+            !source.slice(hooksStart, hooksEnd).includes("new PeerHAManager("),
+            "must not be nested in the hooks"
+        );
     });
 
     test("save writes a private file and load reads it back", () => {
@@ -134,7 +143,12 @@ describe("HA standby guard (what a load balancer sees)", () => {
 
     test("the active node is never touched", () => {
         const ha = makeHa({}, true);
-        for (const [method, p] of [["GET", "/"], ["OPTIONS", "/"], ["GET", "/dashboard"], ["GET", "/status/default"]]) {
+        for (const [method, p] of [
+            ["GET", "/"],
+            ["OPTIONS", "/"],
+            ["GET", "/dashboard"],
+            ["GET", "/status/default"],
+        ]) {
             assert.strictEqual(ask(ha, method, p, "text/html").passed, true, `${method} ${p}`);
         }
     });
@@ -142,7 +156,15 @@ describe("HA standby guard (what a load balancer sees)", () => {
     test("a standby answers 503 on every path and method, so any health check marks it down", () => {
         const ha = makeHa();
         for (const method of ["GET", "HEAD", "OPTIONS", "POST"]) {
-            for (const p of ["/", "/dashboard", "/status/default", "/api/badge/1/status", "/metrics", "/api/push/abc", "/socket.io/"]) {
+            for (const p of [
+                "/",
+                "/dashboard",
+                "/status/default",
+                "/api/badge/1/status",
+                "/metrics",
+                "/api/push/abc",
+                "/socket.io/",
+            ]) {
                 const out = ask(ha, method, p);
                 assert.strictEqual(out.passed, false, `${method} ${p} must not pass`);
                 assert.strictEqual(out.status, 503, `${method} ${p}`);
@@ -167,7 +189,10 @@ describe("HA standby guard (what a load balancer sees)", () => {
         const out = ask(makeHa(), "GET", "/", "text/html,application/xhtml+xml");
         assert.strictEqual(out.status, 503);
         assert.match(out.body, /standby/i);
-        assert.ok(!out.body.includes("10.1.2.4") && !out.body.includes("10.1.2.3"), "no internal addresses on a public page");
+        assert.ok(
+            !out.body.includes("10.1.2.4") && !out.body.includes("10.1.2.3"),
+            "no internal addresses on a public page"
+        );
     });
 
     test("standbyStatusPages: serves public pages, still refuses the dashboard", () => {
@@ -361,7 +386,11 @@ describe("HA peers (two nodes, real HTTP, real SQLite files)", { skip: !Database
      */
     function beat(node, monitorId, status) {
         const db = new DatabaseSync(node.live);
-        db.prepare("INSERT INTO heartbeat (monitor_id, status, note) VALUES (?, ?, ?)").run(monitorId, status, node.name);
+        db.prepare("INSERT INTO heartbeat (monitor_id, status, note) VALUES (?, ?, ?)").run(
+            monitorId,
+            status,
+            node.name
+        );
         db.close();
     }
 
@@ -392,7 +421,14 @@ describe("HA peers (two nodes, real HTTP, real SQLite files)", { skip: !Database
      * @returns {Promise<{a: object, b: object}>} Nodes
      */
     async function cluster(extra = {}) {
-        const timing = { failoverAfterSec: 1, staggerSec: 1, failbackAfterSec: 0, isolationGraceSec: 0, snapshotIntervalSec: 5, ...extra };
+        const timing = {
+            failoverAfterSec: 1,
+            staggerSec: 1,
+            failbackAfterSec: 0,
+            isolationGraceSec: 0,
+            snapshotIntervalSec: 5,
+            ...extra,
+        };
         const a = await createNode("A", { preferred: true, bootstrap: true, config: timing });
         const b = await createNode("B", { config: timing });
         // The checks use real intervals below the allowed minimum: skip validation by assigning directly
@@ -635,7 +671,12 @@ describe("HA peers (two nodes, real HTTP, real SQLite files)", { skip: !Database
 
     test("only a non-preferred active node hands over, and only on request of an authenticated peer", async () => {
         const { a, b } = await cluster();
-        const unauth = await dispatchPeerRequest(a.ha, { method: "POST", name: "handover", authorization: "Bearer nope", body: {} });
+        const unauth = await dispatchPeerRequest(a.ha, {
+            method: "POST",
+            name: "handover",
+            authorization: "Bearer nope",
+            body: {},
+        });
         assert.strictEqual(unauth.status, 401);
         const refused = await dispatchPeerRequest(a.ha, {
             method: "POST",

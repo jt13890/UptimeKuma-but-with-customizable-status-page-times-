@@ -407,7 +407,10 @@ let needSetup = false;
                     process.env.UPTIME_KUMA_HA_URL || ""
                 )
             );
-            log.info("ha", "Joined an HA cluster from UPTIME_KUMA_HA_JOIN. This node will sync from the active node first.");
+            log.info(
+                "ha",
+                "Joined an HA cluster from UPTIME_KUMA_HA_JOIN. This node will sync from the active node first."
+            );
         }
         if (peerConfig?.enabled) {
             if (Database.dbConfig.type !== "sqlite") {
