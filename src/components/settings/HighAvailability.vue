@@ -159,6 +159,12 @@
                     <div class="form-text">{{ $t("haObserveHelp") }}</div>
                 </div>
 
+                <div class="form-check form-switch my-3">
+                    <input id="ha-standby-pages" v-model="form.standbyStatusPages" class="form-check-input" type="checkbox" />
+                    <label class="form-check-label" for="ha-standby-pages">{{ $t("haStandbyStatusPages") }}</label>
+                    <div class="form-text">{{ $t("haStandbyStatusPagesHelp") }}</div>
+                </div>
+
                 <div class="my-3">
                     <label for="ha-targets" class="form-label">{{ $t("haConnectivityTargets") }}</label>
                     <textarea id="ha-targets" v-model="targetsText" class="form-control" rows="2" placeholder="1.1.1.1:443"></textarea>
@@ -183,7 +189,7 @@
                 <div v-if="token">
                     <textarea class="form-control font-monospace" rows="4" readonly :value="token" @focus="$event.target.select()"></textarea>
                     <div class="form-text my-2">{{ $t("haTokenWarning") }}</div>
-                    <pre class="bg-dark text-light p-3 rounded"><code>docker run -d --restart=always -p 3001:3001 -v uptime-kuma:/app/data \
+                    <pre class="bg-dark text-light p-3" style="border-radius: 0.5rem; overflow-x: auto; white-space: pre"><code>docker run -d --restart=always -p 3001:3001 -v uptime-kuma:/app/data \
   -e UPTIME_KUMA_HA_JOIN="{{ token }}" \
   -e UPTIME_KUMA_HA_NODE_NAME="second-node" \
   -e UPTIME_KUMA_HA_URL="https://this-second-node.example.com" \

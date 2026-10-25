@@ -38,6 +38,9 @@ const DEFAULTS = {
     failbackAfterSec: 30,
     // Standby nodes also run the checks and report what they see ("up wins")
     observe: true,
+    // false: a standby answers HTTP 503 on every path (except the node-to-node API), so a load balancer such as
+    // HAProxy marks it down whatever it checks. true: it keeps serving public status pages, only the dashboard is refused.
+    standbyStatusPages: false,
     // An active node without connectivity for this long stands down instead of recording false DOWNs
     isolationGraceSec: 20,
     // host:port list used to decide "do I have connectivity". Empty = never consider this node isolated.
@@ -55,6 +58,7 @@ const SHARED_KEYS = [
     "autoFailback",
     "failbackAfterSec",
     "observe",
+    "standbyStatusPages",
     "isolationGraceSec",
     "connectivityTargets",
 ];
@@ -107,6 +111,7 @@ function normalize(input = {}) {
     cfg.bootstrap = !!cfg.bootstrap;
     cfg.autoFailback = !!cfg.autoFailback;
     cfg.observe = !!cfg.observe;
+    cfg.standbyStatusPages = !!cfg.standbyStatusPages;
     cfg.nodeName = String(cfg.nodeName || "").trim().substring(0, 60);
     cfg.secret = String(cfg.secret || "");
     cfg.selfUrl = cfg.selfUrl ? normalizeUrl(cfg.selfUrl) : "";

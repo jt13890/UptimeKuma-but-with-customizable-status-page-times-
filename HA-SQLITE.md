@@ -37,6 +37,25 @@ exposes the dashboard. When the main node is back, it gets everything the other 
 | The link between the nodes breaks, both have internet | Both become active (see *Limits*). When the link is back the node with the higher epoch wins, the other one demotes and takes over its data. Its own database is kept in `data/ha/backups/`. |
 | A node has no connectivity at all and cannot see the other | It never promotes itself, it cannot know whether the other node is dead or whether it is the one that is cut off. |
 
+## Load balancer (HAProxy, nginx, Traefik)
+
+A standby answers **HTTP 503 on every path and method** (including `OPTIONS /` and `HEAD /`, the default checks of
+most load balancers), except the node-to-node API. So a load balancer marks it down without special configuration and
+only the active node receives traffic. Its answer carries `X-HA-Role: standby` and `Retry-After: 10`.
+
+```
+backend kuma
+    option httpchk GET /api/ha/health
+    http-check expect status 200
+    server node-a 10.0.0.1:3001 check inter 3s fall 2 rise 2
+    server node-b 10.0.0.2:3001 check inter 3s fall 2 rise 2
+```
+
+`/api/ha/health` also tells you why (`role`, `epoch`). During a handover both nodes are briefly down (a few seconds).
+If you prefer the standby to keep serving public status pages (for DNS based failover without a load balancer),
+turn on *Standby also serves public status pages*; then the load balancer **must** check `/api/ha/health`, because
+`/` and the status pages answer 200 on both nodes.
+
 ## How it works
 
 - **Election** (`server/ha-peer.js`): every 5 s each node asks the other for its status. No active node reachable for
@@ -62,7 +81,7 @@ exposes the dashboard. When the main node is back, it gets everything the other 
 - **Two nodes only** are supported and tested.
 - **Files outside the database** (`data/upload`, custom CSS assets) are not replicated.
 - Enabling/disabling, node name, peers and the secret need a restart; the other tunables apply live.
-- The standby serves public status pages, badges and the API, but not the dashboard (it shows a short notice).
+- By default the standby answers 503 everywhere (see *Load balancer*). With *Standby also serves public status pages* it serves status pages, badges and the API, but not the dashboard.
 - If you only monitor your local network, clear the connectivity targets, otherwise a node that has no internet is
   considered offline.
 
