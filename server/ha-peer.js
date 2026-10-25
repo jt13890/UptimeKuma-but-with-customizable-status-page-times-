@@ -211,7 +211,10 @@ class PeerHAManager extends HAManager {
     activePeers() {
         return [...this.peerStates.values()]
             .filter((p) => p.reachable && p.role === "active")
-            .sort((a, b) => b.epoch - a.epoch || Number(b.preferred) - Number(a.preferred) || (a.nodeId < b.nodeId ? -1 : 1));
+            .sort(
+                (a, b) =>
+                    b.epoch - a.epoch || Number(b.preferred) - Number(a.preferred) || (a.nodeId < b.nodeId ? -1 : 1)
+            );
     }
 
     /**
@@ -295,7 +298,8 @@ class PeerHAManager extends HAManager {
         if (!this.internetOk) {
             this.blindSince ??= now;
             if (now - this.blindSince >= this.config.isolationGraceSec * 1000) {
-                this.demoteReason = "this node lost connectivity, standing down so it does not record false DOWN results";
+                this.demoteReason =
+                    "this node lost connectivity, standing down so it does not record false DOWN results";
                 this.noLeaderSince = null;
                 this.blindSince = null;
                 return false;
@@ -355,7 +359,9 @@ class PeerHAManager extends HAManager {
 
         const waitMs = (cfg.failoverAfterSec + (cfg.preferred ? 0 : cfg.staggerSec)) * 1000;
         if (this.forceLead || now - this.noLeaderSince >= waitMs) {
-            const why = this.forceLead ? "the active node shut down" : `no active node for ${Math.round((now - this.noLeaderSince) / 1000)}s`;
+            const why = this.forceLead
+                ? "the active node shut down"
+                : `no active node for ${Math.round((now - this.noLeaderSince) / 1000)}s`;
             this.forceLead = false;
             return this.becomeActive(why);
         }
@@ -425,7 +431,9 @@ class PeerHAManager extends HAManager {
         }
         const peer = this.peerStates.get(url);
         if (peer?.versionMismatch) {
-            throw new Error(`The other node runs version ${peer.version}, this node ${this.version}. Update both to the same version.`);
+            throw new Error(
+                `The other node runs version ${peer.version}, this node ${this.version}. Update both to the same version.`
+            );
         }
         const result = await this.replicator.pull(url, this.config.secret, {
             have: final ? null : this.state.appliedId,
@@ -595,9 +603,13 @@ class PeerHAManager extends HAManager {
         if (!leader) {
             return;
         }
-        this.peerRequest(leader.url, "POST", "/api/ha/observe", { monitorId, status, ping, nodeId: this.nodeId }, 2000).catch(
-            (e) => log.debug("ha", `Could not send observation: ${e.message}`)
-        );
+        this.peerRequest(
+            leader.url,
+            "POST",
+            "/api/ha/observe",
+            { monitorId, status, ping, nodeId: this.nodeId },
+            2000
+        ).catch((e) => log.debug("ha", `Could not send observation: ${e.message}`));
     }
 
     /**
