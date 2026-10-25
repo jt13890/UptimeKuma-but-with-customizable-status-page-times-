@@ -183,6 +183,7 @@ function save(dataDir, cfg) {
  * Join token: what a second node needs to find the first one. It contains the shared secret, treat it like a password.
  * @param {object} cfg Config of the node that creates the token
  * @returns {string} Token
+ * @throws {Error} This node has no URL yet, the second node needs it to find this one
  */
 function makeJoinToken(cfg) {
     if (!cfg.selfUrl) {
@@ -209,6 +210,7 @@ function makeJoinToken(cfg) {
  * @param {string} nodeName Name of this node
  * @param {string} selfUrl URL of this node as seen by the other node (optional)
  * @returns {object} Config (enabled, not bootstrap: it must sync before it may become active)
+ * @throws {Error} The token is not valid
  */
 function fromJoinToken(token, nodeName, selfUrl = "") {
     let payload;

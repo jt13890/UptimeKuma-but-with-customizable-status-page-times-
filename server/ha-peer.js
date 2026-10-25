@@ -550,6 +550,7 @@ class PeerHAManager extends HAManager {
      * A standby reports what it saw ("up wins")
      * @param {object} body {monitorId, status, ping, nodeId}
      * @returns {void}
+     * @throws {Error} With .status 400 when the observation is malformed
      */
     handleObserve(body) {
         const monitorId = Number(body?.monitorId);
