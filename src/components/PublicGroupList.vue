@@ -27,6 +27,29 @@
                         data-testid="group-name"
                         @click="!editMode && toggleGroup(group.element)"
                     />
+
+                    <!-- Login-only groups: switch in edit mode, badge for logged-in viewers -->
+                    <button
+                        v-if="editMode"
+                        type="button"
+                        class="btn btn-sm ms-3 login-required-toggle"
+                        :class="group.element.loginRequired ? 'btn-warning' : 'btn-outline-secondary'"
+                        :title="$t('loginRequiredGroupHelp')"
+                        :aria-pressed="!!group.element.loginRequired"
+                        data-testid="group-login-required"
+                        @click="group.element.loginRequired = !group.element.loginRequired"
+                    >
+                        <font-awesome-icon :icon="group.element.loginRequired ? 'lock' : 'lock-open'" class="me-1" />
+                        {{ group.element.loginRequired ? $t("loginRequiredGroupOn") : $t("loginRequiredGroupOff") }}
+                    </button>
+                    <span
+                        v-else-if="group.element.loginRequired"
+                        class="badge bg-warning text-dark ms-3 login-required-badge"
+                        :title="$t('loginRequiredGroupHelp')"
+                        data-testid="group-login-badge"
+                    >
+                        <font-awesome-icon icon="lock" class="me-1" />{{ $t("loginRequiredGroupBadge") }}
+                    </span>
                 </h2>
 
                 <transition name="slide-fade-up">

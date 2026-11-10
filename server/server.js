@@ -327,6 +327,7 @@ const {
     sendMonitorTypeList,
 } = require("./client");
 const { statusPageSocketHandler } = require("./socket-handlers/status-page-socket-handler");
+const { historyEditSocketHandler } = require("./socket-handlers/history-edit-socket-handler");
 const { databaseSocketHandler } = require("./socket-handlers/database-socket-handler");
 const { remoteBrowserSocketHandler } = require("./socket-handlers/remote-browser-socket-handler");
 const TwoFA = require("./2fa");
@@ -1160,6 +1161,11 @@ let needSetup = false;
                 bean.ntp_stratum_threshold = monitor.ntpStratumThreshold;
                 bean.ntp_time_offset_threshold = monitor.ntpTimeOffsetThreshold;
                 bean.ntp_root_dispersion_threshold = monitor.ntpRootDispersionThreshold;
+                bean.haproxy_agent_url = monitor.haproxyAgentUrl;
+                bean.haproxy_agent_token = monitor.haproxyAgentToken;
+                bean.haproxy_proxy = monitor.haproxyProxy;
+                bean.haproxy_server = monitor.haproxyServer;
+                bean.haproxy_min_up_servers = monitor.haproxyMinUpServers;
 
                 // ping advanced options
                 bean.ping_numeric = monitor.ping_numeric;
@@ -1936,6 +1942,7 @@ let needSetup = false;
 
         // Status Page Socket Handler for admin only
         statusPageSocketHandler(socket);
+        historyEditSocketHandler(socket, server);
         cloudflaredSocketHandler(socket);
         databaseSocketHandler(socket);
         proxySocketHandler(socket);

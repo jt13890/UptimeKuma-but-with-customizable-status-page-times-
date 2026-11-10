@@ -8,36 +8,42 @@ const { badgeConstants, UP, DOWN, MAINTENANCE, DEGRADED } = require("../../src/u
 const dayjs = require("dayjs");
 const { makeBadge } = require("badge-maker");
 const { UptimeCalculator } = require("../uptime-calculator");
+const { viewerAwareCache } = require("../status-page-auth");
 
 let router = express.Router();
 
 let cache = apicache.middleware;
 const server = UptimeKumaServer.getInstance();
 
-router.get("/status/:slug", cache("5 minutes"), async (request, response) => {
+// Like cache(), but authenticated viewers (login-only groups) are never served from or stored in the cache.
+// The routes without a slug parameter belong to the default status page.
+const viewerCache = (duration) => viewerAwareCache(cache(duration));
+const defaultPageViewerCache = (duration) => viewerAwareCache(cache(duration), () => "default");
+
+router.get("/status/:slug", viewerCache("5 minutes"), async (request, response) => {
     let slug = request.params.slug;
     slug = slug.toLowerCase();
-    await StatusPage.handleStatusPageResponse(response, server.indexHTML, slug);
+    await StatusPage.handleStatusPageResponse(response, server.indexHTML, slug, !!request.statusPageAuthenticated);
 });
 
-router.get("/status/:slug/rss", cache("5 minutes"), async (request, response) => {
+router.get("/status/:slug/rss", viewerCache("5 minutes"), async (request, response) => {
     let slug = request.params.slug;
     slug = slug.toLowerCase();
     await StatusPage.handleStatusPageRSSResponse(response, slug, request);
 });
 
-router.get("/status", cache("5 minutes"), async (request, response) => {
+router.get("/status", defaultPageViewerCache("5 minutes"), async (request, response) => {
     let slug = "default";
-    await StatusPage.handleStatusPageResponse(response, server.indexHTML, slug);
+    await StatusPage.handleStatusPageResponse(response, server.indexHTML, slug, !!request.statusPageAuthenticated);
 });
 
-router.get("/status-page", cache("5 minutes"), async (request, response) => {
+router.get("/status-page", defaultPageViewerCache("5 minutes"), async (request, response) => {
     let slug = "default";
-    await StatusPage.handleStatusPageResponse(response, server.indexHTML, slug);
+    await StatusPage.handleStatusPageResponse(response, server.indexHTML, slug, !!request.statusPageAuthenticated);
 });
 
 // Status page config, incident, monitor list
-router.get("/api/status-page/:slug", cache("5 minutes"), async (request, response) => {
+router.get("/api/status-page/:slug", viewerCache("5 minutes"), async (request, response) => {
     allowDevAllOrigin(response);
     let slug = request.params.slug;
     slug = slug.toLowerCase();
@@ -51,7 +57,7 @@ router.get("/api/status-page/:slug", cache("5 minutes"), async (request, respons
             return null;
         }
 
-        let statusPageData = await StatusPage.getStatusPageData(statusPage);
+        let statusPageData = await StatusPage.getStatusPageData(statusPage, !!request.statusPageAuthenticated);
 
         // Response
         response.json(statusPageData);
@@ -63,7 +69,7 @@ router.get("/api/status-page/:slug", cache("5 minutes"), async (request, respons
 // Status Page Polling Data
 // Can fetch only if published
 // Optional query: ?maxBeats=N, the number of bars the client can display (used when the status page has a history range set)
-router.get("/api/status-page/heartbeat/:slug", cache("1 minutes"), async (request, response) => {
+router.get("/api/status-page/heartbeat/:slug", viewerCache("1 minutes"), async (request, response) => {
     allowDevAllOrigin(response);
 
     try {
@@ -84,6 +90,7 @@ router.get("/api/status-page/heartbeat/:slug", cache("1 minutes"), async (reques
             WHERE monitor_group.group_id = \`group\`.id
             AND public = 1
             AND \`group\`.status_page_id = ?
+            ${loginOnlyFilter(request)}
         `,
             [statusPageID]
         );
@@ -123,6 +130,15 @@ router.get("/api/status-page/heartbeat/:slug", cache("1 minutes"), async (reques
         sendHttpError(response, error.message);
     }
 });
+
+/**
+ * SQL condition that leaves out the login-only groups for viewers that are not authenticated
+ * @param {import("express").Request} request Request, see viewerAwareCache()
+ * @returns {string} SQL to add to a query on the group table, or an empty string
+ */
+function loginOnlyFilter(request) {
+    return request.statusPageAuthenticated ? "" : "AND `group`.login_required = 0";
+}
 
 /**
  * Parse the maxBeats query parameter
@@ -245,7 +261,7 @@ router.get("/api/status-page/:slug/incident-history", cache("5 minutes"), async 
 });
 
 // overall status-page status badge
-router.get("/api/status-page/:slug/badge", cache("5 minutes"), async (request, response) => {
+router.get("/api/status-page/:slug/badge", viewerCache("5 minutes"), async (request, response) => {
     allowDevAllOrigin(response);
     let slug = request.params.slug;
     slug = slug.toLowerCase();
@@ -266,6 +282,7 @@ router.get("/api/status-page/:slug/badge", cache("5 minutes"), async (request, r
             WHERE monitor_group.group_id = \`group\`.id
             AND public = 1
             AND \`group\`.status_page_id = ?
+            ${loginOnlyFilter(request)}
         `,
             [statusPageID]
         );

@@ -83,6 +83,7 @@
                                             {{ $t("Globalping - Access global monitoring probes") }}
                                         </option>
                                         <option value="grpc-keyword">gRPC(s) - {{ $t("Keyword") }}</option>
+                                        <option value="haproxy">HAProxy</option>
                                         <option value="json-query">HTTP(s) - {{ $t("Json Query") }}</option>
                                         <option value="kafka-producer">Kafka Producer</option>
                                         <option value="mqtt">MQTT</option>
@@ -942,6 +943,93 @@
                                 </div>
                             </template>
 
+                            <!-- HAProxy Configuration -->
+                            <template v-if="monitor.type === 'haproxy'">
+                                <h4 class="mt-4">{{ $t("haproxyTitle") }}</h4>
+                                <div class="form-text mb-3">{{ $t("haproxyDescription") }}</div>
+
+                                <div class="my-3">
+                                    <label for="haproxy-agent-url" class="form-label">
+                                        {{ $t("haproxyAgentUrl") }}
+                                    </label>
+                                    <input
+                                        id="haproxy-agent-url"
+                                        v-model="monitor.haproxyAgentUrl"
+                                        type="url"
+                                        class="form-control"
+                                        placeholder="http://100.64.0.10:8404"
+                                        data-testid="haproxy-agent-url"
+                                        required
+                                    />
+                                </div>
+
+                                <div class="my-3">
+                                    <label for="haproxy-agent-token" class="form-label">
+                                        {{ $t("haproxyAgentToken") }}
+                                    </label>
+                                    <HiddenInput
+                                        id="haproxy-agent-token"
+                                        v-model="monitor.haproxyAgentToken"
+                                        autocomplete="false"
+                                        data-testid="haproxy-agent-token"
+                                    ></HiddenInput>
+                                </div>
+
+                                <div class="my-3">
+                                    <label for="haproxy-proxy" class="form-label">{{ $t("haproxyProxy") }}</label>
+                                    <input
+                                        id="haproxy-proxy"
+                                        v-model="monitor.haproxyProxy"
+                                        type="text"
+                                        class="form-control"
+                                        placeholder="web"
+                                        data-testid="haproxy-proxy"
+                                        required
+                                    />
+                                    <div class="form-text">{{ $t("haproxyProxyHelp") }}</div>
+                                </div>
+
+                                <div class="my-3">
+                                    <label for="haproxy-server" class="form-label">{{ $t("haproxyServer") }}</label>
+                                    <input
+                                        id="haproxy-server"
+                                        v-model="monitor.haproxyServer"
+                                        type="text"
+                                        class="form-control"
+                                        data-testid="haproxy-server"
+                                    />
+                                    <div class="form-text">{{ $t("haproxyServerHelp") }}</div>
+                                </div>
+
+                                <div v-if="!monitor.haproxyServer" class="my-3">
+                                    <label for="haproxy-min-up" class="form-label">
+                                        {{ $t("haproxyMinUpServers") }}
+                                    </label>
+                                    <input
+                                        id="haproxy-min-up"
+                                        v-model.number="monitor.haproxyMinUpServers"
+                                        type="number"
+                                        class="form-control"
+                                        min="1"
+                                        step="1"
+                                        data-testid="haproxy-min-up"
+                                    />
+                                    <div class="form-text">{{ $t("haproxyMinUpServersHelp") }}</div>
+                                </div>
+
+                                <div class="my-3 form-check">
+                                    <input
+                                        id="haproxy-ignore-tls"
+                                        v-model="monitor.ignoreTls"
+                                        class="form-check-input"
+                                        type="checkbox"
+                                    />
+                                    <label class="form-check-label" for="haproxy-ignore-tls">
+                                        {{ $t("ignoreTLSError") }}
+                                    </label>
+                                </div>
+                            </template>
+
                             <!-- NTP Configuration -->
                             <template v-if="monitor.type === 'ntp'">
                                 <h4 class="mt-4">{{ $t("ntpThresholdsTitle") }}</h4>
@@ -1746,7 +1834,8 @@
                                     monitor.type === 'rabbitmq' ||
                                     monitor.type === 'snmp' ||
                                     monitor.type === 'websocket-upgrade' ||
-                                    monitor.type === 'kafka-producer'
+                                    monitor.type === 'kafka-producer' ||
+                                    monitor.type === 'haproxy'
                                 "
                                 class="my-3"
                             >
@@ -3491,6 +3580,11 @@ const monitorDefaults = {
     ntpStratumThreshold: 5,
     ntpTimeOffsetThreshold: 1000,
     ntpRootDispersionThreshold: 500,
+    haproxyAgentUrl: "",
+    haproxyAgentToken: "",
+    haproxyProxy: "",
+    haproxyServer: "",
+    haproxyMinUpServers: 1,
 };
 
 export default {

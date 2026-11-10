@@ -221,6 +221,51 @@
                     </div>
                 </div>
 
+                <!-- Login-only groups / forward auth -->
+                <h5 class="mt-4">{{ $t("statusPageAuthTitle") }}</h5>
+                <div class="form-text mb-2">{{ $t("statusPageAuthDescription") }}</div>
+
+                <div class="my-3">
+                    <label for="forward-auth-header" class="form-label">{{ $t("forwardAuthHeader") }}</label>
+                    <input
+                        id="forward-auth-header"
+                        v-model="config.forwardAuthHeader"
+                        type="text"
+                        class="form-control"
+                        placeholder="X-authentik-username"
+                        autocomplete="off"
+                        data-testid="forward-auth-header-input"
+                    />
+                    <div class="form-text">{{ $t("forwardAuthHeaderHelp") }}</div>
+                </div>
+
+                <div v-if="config.forwardAuthHeader" class="my-3">
+                    <label for="forward-auth-proxies" class="form-label">{{ $t("forwardAuthTrustedProxies") }}</label>
+                    <textarea
+                        id="forward-auth-proxies"
+                        v-model="config.forwardAuthTrustedProxies"
+                        class="form-control"
+                        rows="3"
+                        placeholder="100.64.0.0/10&#10;10.0.0.5"
+                        data-testid="forward-auth-proxies-input"
+                    ></textarea>
+                    <div class="form-text">{{ $t("forwardAuthTrustedProxiesHelp") }}</div>
+                </div>
+
+                <div class="my-3">
+                    <label for="forward-auth-login-url" class="form-label">{{ $t("forwardAuthLoginUrl") }}</label>
+                    <input
+                        id="forward-auth-login-url"
+                        v-model="config.forwardAuthLoginUrl"
+                        type="text"
+                        class="form-control"
+                        placeholder="https://auth.example.com/"
+                        autocomplete="off"
+                        data-testid="forward-auth-login-url-input"
+                    />
+                    <div class="form-text">{{ $t("forwardAuthLoginUrlHelp") }}</div>
+                </div>
+
                 <!-- Custom CSS -->
                 <div class="my-3">
                     <div class="mb-1">{{ $t("Custom CSS") }}</div>
@@ -394,6 +439,25 @@
                     </div>
                 </div>
             </template>
+
+            <!-- Some groups are only visible to logged-in viewers -->
+            <div
+                v-if="hiddenGroupCount > 0 && !enableEditMode"
+                class="shadow-box p-3 mb-4 d-flex flex-wrap align-items-center justify-content-between gap-2 login-required-banner"
+                data-testid="login-required-banner"
+            >
+                <span>
+                    <font-awesome-icon icon="lock" class="me-2" />
+                    {{
+                        hiddenGroupCount === 1
+                            ? $t("loginRequiredBannerOne")
+                            : $t("loginRequiredBannerMany", { count: hiddenGroupCount })
+                    }}
+                </span>
+                <a :href="config.loginUrl || '/dashboard'" class="btn btn-primary btn-sm" data-testid="login-required-link">
+                    {{ $t("loginRequiredBannerLogin") }}
+                </a>
+            </div>
 
             <!-- Overall Status -->
             <div class="shadow-box list p-4 overall-status mb-4">
@@ -721,6 +785,10 @@ export default {
             imgDataUrl: "/icon.svg",
             loadedTheme: false,
             loadedData: false,
+            // Number of login-only groups that are hidden from this viewer
+            hiddenGroupCount: 0,
+            // In edit mode the complete group list must be loaded before saving, saving deletes unlisted groups
+            allGroupsLoaded: true,
             baseURL: "",
             clickedEditButton: false,
             maintenanceList: [],
@@ -937,6 +1005,10 @@ export default {
          * @returns {void}
          */
         "$root.loggedIn"(loggedIn) {
+            if (loggedIn && this.enableEditMode) {
+                this.loadAllGroups();
+            }
+
             if (loggedIn) {
                 this.$root.getSocket().emit("getStatusPage", this.slug, (res) => {
                     if (res.ok) {
@@ -1044,6 +1116,7 @@ export default {
                 );
 
                 this.incident = res.data.incident;
+                this.hiddenGroupCount = res.data.hiddenGroupCount || 0;
                 this.maintenanceList = res.data.maintenanceList;
                 this.$root.publicGroupList = res.data.publicGroupList;
 
@@ -1082,6 +1155,17 @@ export default {
          * @returns {Promise<any>} Status page data
          */
         getData: function () {
+            // The page is rendered for an anonymous request, a logged-in viewer needs the login-only groups too
+            const headers = this.viewerAuthHeaders();
+            if (headers.Authorization) {
+                return axios.get("/api/status-page/" + this.slug, { headers }).catch((error) => {
+                    if (window.preloadData && error.response?.status !== 404) {
+                        return { data: window.preloadData };
+                    }
+                    throw error;
+                });
+            }
+
             if (window.preloadData) {
                 return new Promise((resolve) =>
                     resolve({
@@ -1091,6 +1175,34 @@ export default {
             } else {
                 return axios.get("/api/status-page/" + this.slug);
             }
+        },
+
+        /**
+         * Headers that tell the server who is looking at the status page (Uptime Kuma login token)
+         * @returns {object} Authorization header, empty if there is no login token
+         */
+        viewerAuthHeaders() {
+            const token = this.$root.storage().token;
+            if (typeof token === "string" && token !== "" && token !== "autoLogin") {
+                return { Authorization: "Bearer " + token };
+            }
+            return {};
+        },
+
+        /**
+         * Load every group of the status page, including the login-only ones (edit mode)
+         * @returns {void}
+         */
+        loadAllGroups() {
+            this.$root.getSocket().emit("getStatusPageGroups", this.slug, (res) => {
+                if (res.ok) {
+                    this.$root.publicGroupList = res.publicGroupList;
+                    this.hiddenGroupCount = 0;
+                    this.allGroupsLoaded = true;
+                } else {
+                    this.$root.toastError(res.msg);
+                }
+            });
         },
 
         /**
@@ -1114,7 +1226,9 @@ export default {
                     params.maxBeats = this.heartbeatMaxBeats;
                 }
 
-                axios.get("/api/status-page/heartbeat/" + this.slug, { params }).then((res) => {
+                axios
+                    .get("/api/status-page/heartbeat/" + this.slug, { params, headers: this.viewerAuthHeaders() })
+                    .then((res) => {
                     const { heartbeatList, uptimeList } = res.data;
 
                     this.$root.heartbeatList = heartbeatList;
@@ -1197,6 +1311,12 @@ export default {
                 this.enableEditMode = true;
                 this.clickedEditButton = true;
 
+                // Login-only groups may be missing from the public data, the editor needs all of them
+                this.allGroupsLoaded = false;
+                if (this.$root.loggedIn) {
+                    this.loadAllGroups();
+                }
+
                 // Try to fix #1658
                 this.loadedData = true;
             }
@@ -1207,6 +1327,11 @@ export default {
          * @returns {void}
          */
         save() {
+            if (!this.allGroupsLoaded) {
+                toast.error(this.$t("statusPageGroupsNotLoaded"));
+                return;
+            }
+
             this.loading = true;
             let startTime = new Date();
             this.config.slug = this.config.slug.trim().toLowerCase();
