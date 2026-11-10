@@ -406,6 +406,7 @@ router.get("/api/badge/:id/avg-response/:duration?", cache("5 minutes"), async (
             AND heartbeat.time > ${sqlHourOffset}
             AND heartbeat.ping IS NOT NULL
             AND public = 1
+            AND \`group\`.login_required = 0
             AND heartbeat.monitor_id = ?
             `,
                 [-requestedDuration, requestedMonitorId]
@@ -653,6 +654,7 @@ async function isMonitorPublic(monitorID) {
             WHERE monitor_group.group_id = \`group\`.id
             AND monitor_group.monitor_id = ?
             AND public = 1
+            AND \`group\`.login_required = 0
         `,
         [monitorID]
     );

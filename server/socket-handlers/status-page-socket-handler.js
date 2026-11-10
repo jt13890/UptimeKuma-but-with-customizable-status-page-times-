@@ -9,6 +9,7 @@ const StatusPage = require("../model/status_page");
 const Monitor = require("../model/monitor");
 const { UptimeKumaServer } = require("../uptime-kuma-server");
 const { Settings } = require("../settings");
+const { normalizeHeaderName, normalizeTrustedProxies, normalizeLoginUrl } = require("../status-page-auth");
 
 /**
  * Validates incident data
@@ -288,6 +289,32 @@ module.exports.statusPageSocketHandler = (socket) => {
         }
     });
 
+    // All groups of a status page, including the login-only ones.
+    // The editor needs the complete list: saving deletes every group that is not in it.
+    socket.on("getStatusPageGroups", async (slug, callback) => {
+        try {
+            checkLogin(socket);
+
+            let statusPage = await R.findOne("status_page", " slug = ? ", [slug]);
+
+            if (!statusPage) {
+                throw new Error("No slug?");
+            }
+
+            const { publicGroupList } = await StatusPage.getStatusPageData(statusPage, true);
+
+            callback({
+                ok: true,
+                publicGroupList,
+            });
+        } catch (error) {
+            callback({
+                ok: false,
+                msg: error.message,
+            });
+        }
+    });
+
     // Save Status Page
     // imgDataUrl Only Accept PNG!
     socket.on("saveStatusPage", async (slug, config, imgDataUrl, publicGroupList, callback) => {
@@ -346,6 +373,9 @@ module.exports.statusPageSocketHandler = (socket) => {
                 throw new Error("Invalid analytics type");
             }
             statusPage.analytics_type = config.analyticsType;
+            statusPage.forward_auth_header = normalizeHeaderName(config.forwardAuthHeader);
+            statusPage.forward_auth_trusted_proxies = normalizeTrustedProxies(config.forwardAuthTrustedProxies) || null;
+            statusPage.forward_auth_login_url = normalizeLoginUrl(config.forwardAuthLoginUrl);
 
             await R.store(statusPage);
 
@@ -370,6 +400,7 @@ module.exports.statusPageSocketHandler = (socket) => {
                 groupBean.status_page_id = statusPage.id;
                 groupBean.name = group.name;
                 groupBean.public = true;
+                groupBean.login_required = !!group.loginRequired;
                 groupBean.weight = groupOrder++;
 
                 await R.store(groupBean);

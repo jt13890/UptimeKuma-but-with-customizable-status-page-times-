@@ -48,7 +48,7 @@ class StatusPage extends BeanModel {
         if (statusPage) {
             const feedUrl = await StatusPage.buildRSSUrl(slug, request);
             response.type("application/rss+xml");
-            response.send(await StatusPage.renderRSS(statusPage, feedUrl));
+            response.send(await StatusPage.renderRSS(statusPage, feedUrl, !!request.statusPageAuthenticated));
         } else {
             response.status(404).send(UptimeKumaServer.getInstance().indexHTML);
         }
@@ -59,9 +59,10 @@ class StatusPage extends BeanModel {
      * @param {Response} response Response object
      * @param {string} indexHTML HTML to render
      * @param {string} slug Status page slug
+     * @param {boolean} authenticated Is the viewer authenticated? Login-only groups are left out otherwise
      * @returns {Promise<void>}
      */
-    static async handleStatusPageResponse(response, indexHTML, slug) {
+    static async handleStatusPageResponse(response, indexHTML, slug, authenticated = false) {
         // Handle url with trailing slash (http://localhost:3001/status/)
         // The slug comes from the route "/status/:slug". If the slug is empty, express converts it to "index.html"
         if (slug === "index.html") {
@@ -71,7 +72,7 @@ class StatusPage extends BeanModel {
         let statusPage = await R.findOne("status_page", " slug = ? ", [slug]);
 
         if (statusPage) {
-            response.send(await StatusPage.renderHTML(indexHTML, statusPage));
+            response.send(await StatusPage.renderHTML(indexHTML, statusPage, authenticated));
         } else {
             response.status(404).send(UptimeKumaServer.getInstance().indexHTML);
         }
@@ -81,10 +82,11 @@ class StatusPage extends BeanModel {
      * SSR for RSS feed
      * @param {StatusPage} statusPage Status page object
      * @param {string} feedUrl The URL for the RSS feed
+     * @param {boolean} authenticated Is the viewer authenticated? Login-only groups are left out otherwise
      * @returns {Promise<string>} The rendered RSS XML
      */
-    static async renderRSS(statusPage, feedUrl) {
-        const { incidents, heartbeats, statusDescription } = await StatusPage.getRSSPageData(statusPage);
+    static async renderRSS(statusPage, feedUrl, authenticated = false) {
+        const { incidents, heartbeats, statusDescription } = await StatusPage.getRSSPageData(statusPage, authenticated);
 
         // Use custom RSS title if set, otherwise fall back to status page title
         let feedTitle = "Uptime Kuma RSS Feed";
@@ -162,9 +164,10 @@ class StatusPage extends BeanModel {
      * SSR for status pages
      * @param {string} indexHTML HTML page to render
      * @param {StatusPage} statusPage Status page populate HTML with
+     * @param {boolean} authenticated Is the viewer authenticated? Login-only groups are left out otherwise
      * @returns {Promise<string>} the rendered html
      */
-    static async renderHTML(indexHTML, statusPage) {
+    static async renderHTML(indexHTML, statusPage, authenticated = false) {
         const $ = cheerio.load(indexHTML);
 
         const description155 = marked(statusPage.description ?? "")
@@ -200,7 +203,7 @@ class StatusPage extends BeanModel {
 
         // Preload data
         // Add jsesc, fix https://github.com/louislam/uptime-kuma/issues/2186
-        const escapedJSONObject = jsesc(await StatusPage.getStatusPageData(statusPage), {
+        const escapedJSONObject = jsesc(await StatusPage.getStatusPageData(statusPage, authenticated), {
             isScriptContext: true,
         });
 
@@ -283,10 +286,11 @@ class StatusPage extends BeanModel {
     /**
      * Get all data required for RSS
      * @param {StatusPage} statusPage Status page to get data for
+     * @param {boolean} authenticated Is the viewer authenticated? Login-only groups are left out otherwise
      * @returns {object} Status page data
      */
-    static async getRSSPageData(statusPage) {
-        const { incidents, publicGroupList } = await StatusPage.getStatusPageData(statusPage);
+    static async getRSSPageData(statusPage, authenticated = false) {
+        const { incidents, publicGroupList } = await StatusPage.getStatusPageData(statusPage, authenticated);
 
         let heartbeats = [];
 
@@ -320,9 +324,10 @@ class StatusPage extends BeanModel {
     /**
      * Get all status page data in one call
      * @param {StatusPage} statusPage Status page to get data for
+     * @param {boolean} authenticated Is the viewer authenticated? Login-only groups are left out otherwise
      * @returns {object} Status page data
      */
-    static async getStatusPageData(statusPage) {
+    static async getStatusPageData(statusPage, authenticated = false) {
         const config = await statusPage.toPublicJSON();
 
         // All active incidents
@@ -341,7 +346,14 @@ class StatusPage extends BeanModel {
 
         const list = await R.find("group", "public = 1 AND status_page_id = ? ORDER BY weight", [statusPage.id]);
 
+        let hiddenGroupCount = 0;
+
         for (let groupBean of list) {
+            if (groupBean.login_required && !authenticated) {
+                hiddenGroupCount++;
+                continue;
+            }
+
             let monitorGroup = await groupBean.toPublicJSON(showTags, config?.showCertificateExpiry);
             publicGroupList.push(monitorGroup);
         }
@@ -352,6 +364,8 @@ class StatusPage extends BeanModel {
             incidents,
             publicGroupList,
             maintenanceList,
+            authenticated: !!authenticated,
+            hiddenGroupCount,
         };
     }
 
@@ -468,6 +482,9 @@ class StatusPage extends BeanModel {
             showOnlyLastHeartbeat: !!this.show_only_last_heartbeat,
             rssTitle: this.rss_title,
             heartbeatBarDays: StatusPage.normalizeHeartbeatBarDays(this.heartbeat_bar_days),
+            forwardAuthHeader: this.forward_auth_header || "",
+            forwardAuthTrustedProxies: this.forward_auth_trusted_proxies || "",
+            forwardAuthLoginUrl: this.forward_auth_login_url || "",
         };
     }
 
@@ -496,6 +513,7 @@ class StatusPage extends BeanModel {
             showOnlyLastHeartbeat: !!this.show_only_last_heartbeat,
             rssTitle: this.rss_title,
             heartbeatBarDays: StatusPage.normalizeHeartbeatBarDays(this.heartbeat_bar_days),
+            loginUrl: this.forward_auth_login_url || "",
         };
     }
 

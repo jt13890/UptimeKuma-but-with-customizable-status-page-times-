@@ -138,6 +138,14 @@
                         <font-awesome-icon icon="clone" />
                         {{ $t("Clone") }}
                     </router-link>
+                    <button
+                        class="btn btn-normal"
+                        data-testid="edit-history-button"
+                        @click="$refs.historyEditDialog.show()"
+                    >
+                        <font-awesome-icon icon="history" />
+                        {{ $t("historyEditButton") }}
+                    </button>
                     <button class="btn btn-normal text-danger" @click="deleteDialog">
                         <font-awesome-icon icon="trash" />
                         {{ $t("Delete") }}
@@ -423,6 +431,8 @@
                 {{ $t("clearEventsMsg") }}
             </Confirm>
 
+            <MonitorHistoryEditDialog ref="historyEditDialog" :monitor-id="monitor.id" />
+
             <Confirm
                 ref="confirmClearHeartbeats"
                 btn-style="btn-danger"
@@ -462,6 +472,7 @@ import "prismjs/components/prism-css";
 import { PrismEditor } from "vue-prism-editor";
 import "vue-prism-editor/dist/prismeditor.min.css";
 import ScreenshotDialog from "../components/ScreenshotDialog.vue";
+import MonitorHistoryEditDialog from "../components/MonitorHistoryEditDialog.vue";
 
 export default {
     components: {
@@ -477,6 +488,7 @@ export default {
         CertificateInfo,
         PrismEditor,
         ScreenshotDialog,
+        MonitorHistoryEditDialog,
     },
     data() {
         return {

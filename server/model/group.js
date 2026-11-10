@@ -22,6 +22,7 @@ class Group extends BeanModel {
             id: this.id,
             name: this.name,
             weight: this.weight,
+            loginRequired: !!this.login_required,
             monitorList,
         };
     }

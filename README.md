@@ -35,6 +35,87 @@ It is a temporary live demo, all data will be deleted after 10 minutes. Sponsore
 - Proxy support
 - 2FA support
 
+## ✨ Fork additions
+
+This fork adds the following on top of Uptime Kuma 2.2.x.
+
+### 🕰️ Edit history (set past time slots to UP / DOWN)
+
+On a monitor's page, **Edit history** lets you pick a time range in the past and set it to UP or DOWN, for example to correct a false outage or to record a real one the monitor missed. A preview shows how many heartbeats will change before you confirm.
+
+- **Existing heartbeats** in the range get the new status and the note `Manually set to UP (history edit)` / `DOWN`. The events list is updated, so the change shows as a status change at the start and end of the range.
+- **Gaps** (the monitor was paused or the server was off) are filled with one heartbeat per check interval, so the change is visible in the heartbeat bar.
+- **Uptime percentages** are updated: the minute, hour and day statistics move one count per changed heartbeat, so the 24 hour, 30 day and 1 year uptime and the status page agree with the new history.
+- Notifications are not sent for edits.
+- Only time in the past can be changed, at most 90 days at once, and only inside the heartbeat retention period (_Settings > Monitor History_, 180 days by default).
+- Latency statistics are not changed. Filled UP time uses the usual average latency of the monitor.
+- It cannot be undone. Take a backup of `kuma.db` first if you are unsure.
+
+### ⚖️ HAProxy monitor
+
+The **HAProxy** monitor type reads the state of a frontend, backend or server from a small Python agent that runs on the HAProxy node. Uptime Kuma pulls from the agent.
+
+1. Enable a stats socket in the `global` section of `haproxy.cfg` (read-only access is enough):
+
+   ```
+   stats socket /run/haproxy/admin.sock mode 660 level operator
+   ```
+
+2. Copy [`extra/haproxy-agent/haproxy_agent.py`](extra/haproxy-agent/haproxy_agent.py) to the node and run it (Python 3.8+, no packages needed). Bind it to an address Uptime Kuma can reach, for example your Tailscale IP:
+
+   ```bash
+   HAPROXY_AGENT_TOKEN=use-a-long-random-secret \
+     python3 haproxy_agent.py --socket /run/haproxy/admin.sock --listen 100.64.0.10:8404
+   ```
+
+   Use `--tls-cert` and `--tls-key` for HTTPS. The agent refuses to start without a token (at least 16 characters). It only sends `show stat` and `show info` to HAProxy, never anything from a request.
+
+3. Add a monitor of type **HAProxy** with the agent URL, the token and the name of the frontend / backend (and optionally one server).
+
+| What is monitored                                           | Result                                  |
+| ----------------------------------------------------------- | --------------------------------------- |
+| Backend, all servers up                                     | UP                                      |
+| Backend, some servers down (at least the minimum are up)    | Degraded, the message names the servers |
+| Backend, fewer servers up than the minimum, or backend DOWN | DOWN                                    |
+| Single server UP / DOWN                                     | UP / DOWN                               |
+| Single server in `MAINT`                                    | Maintenance                             |
+| Single server `DRAIN` or `NOLB`                             | Degraded                                |
+
+A systemd unit for the agent:
+
+```ini
+[Unit]
+Description=Uptime Kuma HAProxy agent
+After=haproxy.service
+
+[Service]
+Environment=HAPROXY_AGENT_TOKEN=use-a-long-random-secret
+ExecStart=/usr/bin/python3 /opt/haproxy-agent/haproxy_agent.py --socket /run/haproxy/admin.sock --listen 100.64.0.10:8404
+Restart=on-failure
+DynamicUser=yes
+SupplementaryGroups=haproxy
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### 🔒 Login-only groups on status pages
+
+In the status page editor, the lock button next to a group name makes that group visible to logged-in viewers only. Other visitors do not get the group, its monitors, its heartbeats, its RSS entries or its badges, and a banner tells them that groups are hidden.
+
+A viewer counts as logged in when:
+
+- they have an Uptime Kuma login (the token is sent as `Authorization: Bearer`), or
+- **forward / proxy auth**: the request carries the header you set under _Forward auth header_ (for example `X-authentik-username` or `Remote-User`) **and** comes straight from an address in _Trusted proxies_.
+
+Notes for forward auth:
+
+- Your proxy must remove this header from every incoming request that is not authenticated, otherwise visitors can send it themselves.
+- Only the address of the TCP connection is checked, never `X-Forwarded-For`. The header is ignored while _Trusted proxies_ is empty.
+- _Login link_ sets where the banner's "Log in" button goes, for example a proxy-protected URL. Leave it empty to use the Uptime Kuma login.
+- The global "disable auth" setting is deliberately ignored here, because it is used behind such proxies and would make every visitor count as logged in.
+- Responses for logged-in viewers are never cached and are sent with `Cache-Control: private, no-store`.
+
 ## 🔧 How to Install
 
 ### 🐳 Docker Compose
