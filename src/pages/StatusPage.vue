@@ -454,7 +454,11 @@
                             : $t("loginRequiredBannerMany", { count: hiddenGroupCount })
                     }}
                 </span>
-                <a :href="config.loginUrl || '/dashboard'" class="btn btn-primary btn-sm" data-testid="login-required-link">
+                <a
+                    :href="config.loginUrl || '/dashboard'"
+                    class="btn btn-primary btn-sm"
+                    data-testid="login-required-link"
+                >
                     {{ $t("loginRequiredBannerLogin") }}
                 </a>
             </div>
@@ -1229,31 +1233,31 @@ export default {
                 axios
                     .get("/api/status-page/heartbeat/" + this.slug, { params, headers: this.viewerAuthHeaders() })
                     .then((res) => {
-                    const { heartbeatList, uptimeList } = res.data;
+                        const { heartbeatList, uptimeList } = res.data;
 
-                    this.$root.heartbeatList = heartbeatList;
-                    this.$root.uptimeList = uptimeList;
-                    this.heartbeatBarDays = res.data.heartbeatBarDays || 0;
-                    this.heartbeatBarList = res.data.heartbeatBarList || {};
+                        this.$root.heartbeatList = heartbeatList;
+                        this.$root.uptimeList = uptimeList;
+                        this.heartbeatBarDays = res.data.heartbeatBarDays || 0;
+                        this.heartbeatBarList = res.data.heartbeatBarList || {};
 
-                    const heartbeatIds = Object.keys(heartbeatList);
-                    const downMonitors = heartbeatIds.reduce((downMonitorsAmount, currentId) => {
-                        const monitorHeartbeats = heartbeatList[currentId];
-                        const lastHeartbeat = monitorHeartbeats.at(-1);
+                        const heartbeatIds = Object.keys(heartbeatList);
+                        const downMonitors = heartbeatIds.reduce((downMonitorsAmount, currentId) => {
+                            const monitorHeartbeats = heartbeatList[currentId];
+                            const lastHeartbeat = monitorHeartbeats.at(-1);
 
-                        if (lastHeartbeat) {
-                            return lastHeartbeat.status === 0 ? downMonitorsAmount + 1 : downMonitorsAmount;
-                        } else {
-                            return downMonitorsAmount;
-                        }
-                    }, 0);
+                            if (lastHeartbeat) {
+                                return lastHeartbeat.status === 0 ? downMonitorsAmount + 1 : downMonitorsAmount;
+                            } else {
+                                return downMonitorsAmount;
+                            }
+                        }, 0);
 
-                    favicon.badge(downMonitors);
+                        favicon.badge(downMonitors);
 
-                    this.loadedData = true;
-                    this.lastUpdateTime = dayjs();
-                    this.updateUpdateTimer();
-                });
+                        this.loadedData = true;
+                        this.lastUpdateTime = dayjs();
+                        this.updateUpdateTimer();
+                    });
             }
         },
 

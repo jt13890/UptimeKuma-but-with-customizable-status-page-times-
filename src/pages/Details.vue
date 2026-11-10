@@ -138,7 +138,11 @@
                         <font-awesome-icon icon="clone" />
                         {{ $t("Clone") }}
                     </router-link>
-                    <button class="btn btn-normal" data-testid="edit-history-button" @click="$refs.historyEditDialog.show()">
+                    <button
+                        class="btn btn-normal"
+                        data-testid="edit-history-button"
+                        @click="$refs.historyEditDialog.show()"
+                    >
                         <font-awesome-icon icon="history" />
                         {{ $t("historyEditButton") }}
                     </button>

@@ -144,7 +144,10 @@ describe("HAProxy monitor: check() against an agent", () => {
 
     test("agent errors are reported", async () => {
         respond = () => ({ status: 502, body: { error: "cannot connect to HAProxy socket: boom" } });
-        await assert.rejects(new HaproxyMonitorType().check(makeMonitor(), {}, null), /502: cannot connect to HAProxy socket/);
+        await assert.rejects(
+            new HaproxyMonitorType().check(makeMonitor(), {}, null),
+            /502: cannot connect to HAProxy socket/
+        );
     });
 
     test("an unreachable agent is reported", async () => {
@@ -158,7 +161,10 @@ describe("HAProxy monitor: check() against an agent", () => {
         const type = new HaproxyMonitorType();
         await assert.rejects(type.check(makeMonitor({ haproxy_agent_url: "" }), {}, null), /agent URL is required/);
         await assert.rejects(type.check(makeMonitor({ haproxy_agent_url: "not a url" }), {}, null), /invalid/);
-        await assert.rejects(type.check(makeMonitor({ haproxy_agent_url: "ftp://x" }), {}, null), /http:\/\/ or https:\/\//);
+        await assert.rejects(
+            type.check(makeMonitor({ haproxy_agent_url: "ftp://x" }), {}, null),
+            /http:\/\/ or https:\/\//
+        );
         await assert.rejects(type.check(makeMonitor({ haproxy_proxy: "" }), {}, null), /name is required/);
     });
 

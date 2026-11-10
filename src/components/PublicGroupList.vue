@@ -48,7 +48,8 @@
                         :title="$t('loginRequiredGroupHelp')"
                         data-testid="group-login-badge"
                     >
-                        <font-awesome-icon icon="lock" class="me-1" />{{ $t("loginRequiredGroupBadge") }}
+                        <font-awesome-icon icon="lock" class="me-1" />
+                        {{ $t("loginRequiredGroupBadge") }}
                     </span>
                 </h2>
 

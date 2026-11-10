@@ -20,7 +20,10 @@ describe("History edit: validateEdit", () => {
         assert.throws(() => validateEdit({ ...ok, status: "pending" }, NOW), /up or down/);
         assert.throws(() => validateEdit({ ...ok, to: ok.from }, NOW), /after the start/);
         assert.throws(() => validateEdit({ ...ok, to: NOW + 1000 }, NOW), /past/);
-        assert.throws(() => validateEdit({ ...ok, from: NOW - 200 * 86400000, to: NOW - 199 * 86400000 }, NOW, 180), /last 180 days/);
+        assert.throws(
+            () => validateEdit({ ...ok, from: NOW - 200 * 86400000, to: NOW - 199 * 86400000 }, NOW, 180),
+            /last 180 days/
+        );
         assert.throws(() => validateEdit({ ...ok, from: NOW - 100 * 86400000, to: NOW - 1000 }, NOW, 180), /too long/);
     });
 
@@ -61,7 +64,10 @@ describe("History edit: planHistoryEdit", () => {
             beat(5, "2026-11-09T08:04:10Z", UP),
         ];
         const plan = planHistoryEdit({ ...base, beats, status: DOWN });
-        assert.deepStrictEqual(plan.updates.map((u) => u.id), [1, 2, 4, 5]);
+        assert.deepStrictEqual(
+            plan.updates.map((u) => u.id),
+            [1, 2, 4, 5]
+        );
         assert.strictEqual(plan.summary.unchanged, 1);
         assert.strictEqual(plan.summary.inserted, 0);
 
@@ -132,7 +138,15 @@ describe("History edit: planHistoryEdit", () => {
 
     test("too many gaps are refused", () => {
         assert.throws(
-            () => planHistoryEdit({ from: NOW - 30 * 86400000, to: NOW, intervalSeconds: 20, beats: [], status: UP, now: NOW }),
+            () =>
+                planHistoryEdit({
+                    from: NOW - 30 * 86400000,
+                    to: NOW,
+                    intervalSeconds: 20,
+                    beats: [],
+                    status: UP,
+                    now: NOW,
+                }),
             /too many gaps/
         );
     });

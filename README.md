@@ -47,7 +47,7 @@ On a monitor's page, **Edit history** lets you pick a time range in the past and
 - **Gaps** (the monitor was paused or the server was off) are filled with one heartbeat per check interval, so the change is visible in the heartbeat bar.
 - **Uptime percentages** are updated: the minute, hour and day statistics move one count per changed heartbeat, so the 24 hour, 30 day and 1 year uptime and the status page agree with the new history.
 - Notifications are not sent for edits.
-- Only time in the past can be changed, at most 90 days at once, and only inside the heartbeat retention period (*Settings > Monitor History*, 180 days by default).
+- Only time in the past can be changed, at most 90 days at once, and only inside the heartbeat retention period (_Settings > Monitor History_, 180 days by default).
 - Latency statistics are not changed. Filled UP time uses the usual average latency of the monitor.
 - It cannot be undone. Take a backup of `kuma.db` first if you are unsure.
 
@@ -72,14 +72,14 @@ The **HAProxy** monitor type reads the state of a frontend, backend or server fr
 
 3. Add a monitor of type **HAProxy** with the agent URL, the token and the name of the frontend / backend (and optionally one server).
 
-| What is monitored | Result |
-| --- | --- |
-| Backend, all servers up | UP |
-| Backend, some servers down (at least the minimum are up) | Degraded, the message names the servers |
-| Backend, fewer servers up than the minimum, or backend DOWN | DOWN |
-| Single server UP / DOWN | UP / DOWN |
-| Single server in `MAINT` | Maintenance |
-| Single server `DRAIN` or `NOLB` | Degraded |
+| What is monitored                                           | Result                                  |
+| ----------------------------------------------------------- | --------------------------------------- |
+| Backend, all servers up                                     | UP                                      |
+| Backend, some servers down (at least the minimum are up)    | Degraded, the message names the servers |
+| Backend, fewer servers up than the minimum, or backend DOWN | DOWN                                    |
+| Single server UP / DOWN                                     | UP / DOWN                               |
+| Single server in `MAINT`                                    | Maintenance                             |
+| Single server `DRAIN` or `NOLB`                             | Degraded                                |
 
 A systemd unit for the agent:
 
@@ -106,13 +106,13 @@ In the status page editor, the lock button next to a group name makes that group
 A viewer counts as logged in when:
 
 - they have an Uptime Kuma login (the token is sent as `Authorization: Bearer`), or
-- **forward / proxy auth**: the request carries the header you set under *Forward auth header* (for example `X-authentik-username` or `Remote-User`) **and** comes straight from an address in *Trusted proxies*.
+- **forward / proxy auth**: the request carries the header you set under _Forward auth header_ (for example `X-authentik-username` or `Remote-User`) **and** comes straight from an address in _Trusted proxies_.
 
 Notes for forward auth:
 
 - Your proxy must remove this header from every incoming request that is not authenticated, otherwise visitors can send it themselves.
-- Only the address of the TCP connection is checked, never `X-Forwarded-For`. The header is ignored while *Trusted proxies* is empty.
-- *Login link* sets where the banner's "Log in" button goes, for example a proxy-protected URL. Leave it empty to use the Uptime Kuma login.
+- Only the address of the TCP connection is checked, never `X-Forwarded-For`. The header is ignored while _Trusted proxies_ is empty.
+- _Login link_ sets where the banner's "Log in" button goes, for example a proxy-protected URL. Leave it empty to use the Uptime Kuma login.
 - The global "disable auth" setting is deliberately ignored here, because it is used behind such proxies and would make every visitor count as logged in.
 - Responses for logged-in viewers are never cached and are sent with `Cache-Control: private, no-store`.
 
