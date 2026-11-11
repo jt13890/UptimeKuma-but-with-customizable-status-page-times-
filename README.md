@@ -39,6 +39,12 @@ It is a temporary live demo, all data will be deleted after 10 minutes. Sponsore
 
 This fork adds the following on top of Uptime Kuma 2.2.x.
 
+### 🔁 High availability and fork versions
+
+This fork's version is `2.5.5+fork.N` (see `package.json`). The part after `+` is ignored by the update check, so the dashboard does not show a false "update available" notice. High availability nodes compare the full version string and never sync snapshots between different versions, so **update every node to the same fork build** (and rebuild `dist/` with it). The fork number is raised whenever a release adds database migrations.
+
+Handover safety: before a node stops its monitors to give the active role back to the preferred node, it checks that the preferred node is reachable from its side, runs the same version and has connectivity. Otherwise it refuses and keeps running. If the node it handed over to disappears before the handover is finished, it takes the active role back after `failoverAfterSec` instead of waiting for the whole yield time.
+
 ### 🕰️ Edit history (set past time slots to UP / DOWN)
 
 On a monitor's page, **Edit history** lets you pick a time range in the past and set it to UP or DOWN, for example to correct a false outage or to record a real one the monitor missed. A preview shows how many heartbeats will change before you confirm.
