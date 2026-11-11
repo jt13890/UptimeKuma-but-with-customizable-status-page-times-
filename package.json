@@ -1,6 +1,6 @@
 {
     "name": "uptime-kuma",
-    "version": "2.5.5",
+    "version": "2.5.5+fork.1",
     "license": "MIT",
     "repository": {
         "type": "git",

@@ -694,6 +694,121 @@ describe("HA peers (two nodes, real HTTP, real SQLite files)", { skip: !Database
         assert.strictEqual(standbyRefuses.status, 409, "a standby serves no snapshots");
     });
 
+    describe("handover: never stop for a node that cannot take over", () => {
+        const handover = (node, from) =>
+            dispatchPeerRequest(node.ha, {
+                method: "POST",
+                name: "handover",
+                authorization: `Bearer ${SECRET}`,
+                body: { from },
+            });
+
+        /**
+         * The secondary B is active (the main node A was offline) and A is back as a fresh standby process,
+         * A did not ask for anything yet
+         * @param {boolean} aBack False: A stays offline
+         * @returns {Promise<{a: object, b: object}>} Nodes
+         */
+        async function secondaryActive(aBack = true) {
+            const { a, b } = await cluster();
+            beat(a, 1, UP);
+            await tick(b);
+            await powerOff(a);
+            await tick(b);
+            await sleep(2200);
+            await tick(b);
+            assert.strictEqual(b.ha.isLeader(), true, "the secondary took over");
+            b.events.length = 0;
+            if (aBack) {
+                await startServer(a);
+                boot(a, [b.url]);
+                Object.assign(a.ha.config, { failoverAfterSec: 1, staggerSec: 1, failbackAfterSec: 0 });
+            }
+            return { a, b };
+        }
+
+        test("a request from a node that cannot be reached from here is refused, the monitors keep running", async () => {
+            // The request arrives (the way A -> B works), the way back B -> A does not
+            const { a, b } = await secondaryActive(false);
+            const answer = await handover(b, a.ha.nodeId);
+            assert.strictEqual(answer.status, 503);
+            assert.match(answer.json.msg, /cannot be reached/);
+            assert.strictEqual(b.ha.isLeader(), true, "still active");
+            assert.strictEqual(b.ha.yielding, false);
+            assert.ok(!b.events.includes("demote"), "the monitors were not stopped");
+        });
+
+        test("a request from an unknown node is refused", async () => {
+            const { b } = await secondaryActive();
+            const answer = await handover(b, "ghost:1");
+            assert.strictEqual(answer.status, 409);
+            assert.match(answer.json.msg, /not a known peer/);
+            assert.strictEqual((await handover(b, undefined)).status, 409);
+            assert.ok(!b.events.includes("demote"));
+            assert.strictEqual(b.ha.isLeader(), true);
+        });
+
+        test("a requester without connectivity or with another version is refused", async () => {
+            const { a, b } = await secondaryActive();
+
+            a.ha.internetOk = false;
+            let answer = await handover(b, a.ha.nodeId);
+            assert.strictEqual(answer.status, 409);
+            assert.match(answer.json.msg, /no connectivity/);
+            a.ha.internetOk = true;
+
+            a.ha.version = "9.9.9";
+            answer = await handover(b, a.ha.nodeId);
+            assert.strictEqual(answer.status, 409);
+            assert.match(answer.json.msg, /runs version 9\.9\.9/);
+
+            assert.ok(!b.events.includes("demote"));
+            assert.strictEqual(b.ha.isLeader(), true);
+            assert.strictEqual(b.ha.handoverVerifying, false, "the check does not leave the node blocked");
+        });
+
+        test("a reachable preferred requester gets the active role", async () => {
+            const { a, b } = await secondaryActive();
+            const answer = await handover(b, a.ha.nodeId);
+            assert.strictEqual(answer.status, 200);
+            assert.ok(b.events.includes("demote"));
+            assert.strictEqual(b.ha.yielding, true);
+            assert.strictEqual(b.ha.yieldingTo.nodeId, a.ha.nodeId);
+        });
+
+        test("if the node that was to take over disappears, this node resumes without waiting for the whole yield time", async () => {
+            const { a, b } = await secondaryActive();
+            assert.strictEqual((await handover(b, a.ha.nodeId)).status, 200);
+            assert.strictEqual(b.ha.isLeader(), false, "stopped for the handover");
+            assert.ok(b.ha.yieldingUntil - Date.now() > 30000, "the yield time is long");
+
+            await powerOff(a); // A took the request, then died before it applied the final snapshot
+            await tick(b);
+            assert.strictEqual(b.ha.yielding, true, "a gap of a moment does not end the handover");
+
+            await sleep(1200);
+            await tick(b);
+            assert.strictEqual(b.ha.yielding, false, "unreachable for failoverAfterSec: stop yielding");
+            assert.strictEqual(b.ha.yieldingTo, null);
+
+            await sleep(1200);
+            await tick(b);
+            assert.strictEqual(b.ha.isLeader(), true, "the checks run again");
+        });
+
+        test("a short gap of the node that takes over does not cancel the handover", async () => {
+            const { a, b } = await secondaryActive();
+            assert.strictEqual((await handover(b, a.ha.nodeId)).status, 200);
+
+            await powerOff(a);
+            await tick(b);
+            await startServer(a); // back before failoverAfterSec
+            await tick(b);
+            assert.strictEqual(b.ha.yielding, true);
+            assert.strictEqual(b.ha.yieldingTo.unreachableSince, null, "the gap timer starts over");
+        });
+    });
+
     test("shared tunables pushed from the other node are applied, the secret and name stay local", async () => {
         const { a, b } = await cluster();
         const dir = b.dir;

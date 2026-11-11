@@ -70,6 +70,10 @@ class PeerHAManager extends HAManager {
         this.forceLead = false;
         this.yielding = false;
         this.yieldingUntil = 0;
+        // The node this node is handing the active role to: { nodeId, unreachableSince }
+        this.yieldingTo = null;
+        // A handover request is being checked (see verifyHandoverRequester)
+        this.handoverVerifying = false;
         this.finalSnapshot = null;
         this.pendingFinal = null;
         this.handoverBusy = false;
@@ -270,8 +274,9 @@ class PeerHAManager extends HAManager {
         const leaders = this.activePeers();
 
         if (this.yielding) {
-            if (now > this.yieldingUntil || leaders.length > 0) {
+            if (now > this.yieldingUntil || leaders.length > 0 || this.handoverTargetGone(now)) {
                 this.yielding = false;
+                this.yieldingTo = null;
             } else {
                 return false;
             }
@@ -489,6 +494,71 @@ class PeerHAManager extends HAManager {
     }
 
     /**
+     * Can the node that asks for the active role take it, and can this node reach it?
+     * That the request arrived only proves the way from the requester to this node. This node stops its monitors for
+     * the handover, so yielding to a node it cannot reach (broken way back, node died after asking, wrong state) would
+     * leave nobody running the checks. The status is asked again here, a cached one may be old.
+     * @param {string} from Node id of the requester
+     * @returns {Promise<object>} Fresh status of the requester
+     * @throws {Error} With .status when this node must keep the active role
+     */
+    async verifyHandoverRequester(from) {
+        const refuse = (status, msg) => {
+            log.warn("ha", `Not handing over the active role: ${msg}`);
+            return Object.assign(new Error(msg), { status });
+        };
+
+        await this.pollPeers();
+        const requester = [...this.peerStates.values()].find((p) => from && p.nodeId === from);
+        const name = String(from).split(":")[0];
+
+        if (!requester) {
+            throw refuse(409, `${name} is not a known peer, or it cannot be reached from this node`);
+        }
+        if (!requester.reachable) {
+            throw refuse(503, `${requester.name || name} cannot be reached from this node (${requester.lastError})`);
+        }
+        if (requester.versionMismatch) {
+            throw refuse(409, `${requester.name || name} runs version ${requester.version}, this node ${this.version}`);
+        }
+        if (requester.role === "active") {
+            throw refuse(409, `${requester.name || name} is already active`);
+        }
+        if (!requester.preferred) {
+            throw refuse(409, `${requester.name || name} is not the preferred node`);
+        }
+        if (requester.internetOk === false) {
+            throw refuse(409, `${requester.name || name} has no connectivity, it could not run the checks`);
+        }
+        return requester;
+    }
+
+    /**
+     * While this node yields: did the node it yields to disappear? A short gap is normal (it is busy applying the
+     * final snapshot), so it counts only after failoverAfterSec, the time the cluster waits before it fails over.
+     * @param {number} now Now
+     * @returns {boolean} True if this node should stop yielding and run the checks again
+     */
+    handoverTargetGone(now) {
+        const target = this.yieldingTo;
+        if (!target) {
+            return false;
+        }
+        // A peer that is not reachable keeps the node id of its last answer
+        const peer = [...this.peerStates.values()].find((p) => p.nodeId === target.nodeId);
+        if (peer?.reachable) {
+            target.unreachableSince = null;
+            return false;
+        }
+        target.unreachableSince ??= now;
+        if (now - target.unreachableSince >= this.config.failoverAfterSec * 1000) {
+            log.warn("ha", "The node that was to take over the active role cannot be reached, taking the role back");
+            return true;
+        }
+        return false;
+    }
+
+    /**
      * The preferred node wants the active role back. This node stops, takes a final snapshot and yields.
      * @param {string} from Node id of the requester
      * @returns {Promise<{ok: boolean, snapshotId: string, epoch: number}>} Answer
@@ -502,19 +572,30 @@ class PeerHAManager extends HAManager {
         if (this.config.preferred) {
             throw refuse(409, "The preferred node does not hand over");
         }
-        if (this.yielding) {
+        if (this.yielding || this.handoverVerifying) {
             throw refuse(409, "A handover is already in progress");
+        }
+
+        // Stopping the monitors is only worth it if the other node can take over: it must be reachable from here
+        this.handoverVerifying = true;
+        let requester;
+        try {
+            requester = await this.verifyHandoverRequester(from);
+        } finally {
+            this.handoverVerifying = false;
         }
 
         log.info("ha", `Handing the active role over to ${String(from).split(":")[0]}`);
         this.yielding = true;
         this.yieldingUntil = Date.now() + YIELD_MS;
+        this.yieldingTo = { nodeId: requester.nodeId, unreachableSince: null };
         try {
             await this.demote("handing the active role over to the preferred node");
             // Monitors are stopped, nothing records heartbeats anymore: this is the last state of this node
             this.finalSnapshot = await this.replicator.getSnapshot({ fresh: true });
         } catch (e) {
             this.yielding = false;
+            this.yieldingTo = null;
             throw e;
         }
         this.noLeaderSince = Date.now();
